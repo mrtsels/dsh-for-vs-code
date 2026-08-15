@@ -27,7 +27,7 @@ async function askViaPanel(ctx: AppContext, question: string): Promise<void> {
   const finalText = block === '' ? question : `${block}\n\n${question}`;
   await ctx.controller.ask(sessionId, finalText);
 
-  ctx.panel.open();
+  void ctx.panel.open();
 }
 
 export function registerCodeActions(_ctx: AppContext): vscode.Disposable {

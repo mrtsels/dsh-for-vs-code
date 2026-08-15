@@ -17,7 +17,7 @@ export function registerAsk(ctx: AppContext): vscode.Disposable {
         ? `请处理以下选中内容:\n\n${selection}`
         : await vscode.window.showInputBox({ prompt: 'Ask DeepSeek Harness', placeHolder: '输入问题…' });
     if (text === undefined || text.trim() === '') return;
-    ctx.panel.open();
+    void ctx.panel.open();
     try {
       await ensureConnected(ctx);
       const sessionId = await ensureSession(ctx);

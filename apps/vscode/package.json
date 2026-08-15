@@ -74,6 +74,14 @@
         }
       }
     },
+    "chatParticipants": [
+      {
+        "id": "deepseekHarness.agent",
+        "name": "DeepSeekHarness",
+        "description": "DeepSeek Harness agent(模型与工具由 dsh 实例提供)",
+        "isSticky": true
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -86,6 +94,7 @@
     "views": {
       "deepseekHarness": [
         {
+          "type": "webview",
           "id": "deepseekHarness.chat",
           "name": "Chat"
         }

@@ -6,6 +6,6 @@ import type { AppContext } from './context.js';
 
 export function registerAgent(ctx: AppContext): vscode.Disposable {
   return vscode.commands.registerCommand('deepseekHarness.open', () => {
-    ctx.panel.open();
+    void ctx.panel.open();
   });
 }
