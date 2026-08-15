@@ -10,12 +10,12 @@
 
 - **Phase 0 脚手架**:✅ 完成(G0 全绿;G1 FAIL→P1×3 修复 292e91c,复检 PASS)
 - **Phase 1 MVP**:✅ 完成(40 测试全绿,commit e45038c;G1 FAIL→P1×5 已随 996aff9 修复)
-- **Phase 2 IDE-native**:✅ 完成(40 测试全绿;G1 审查 deleg_3930aeaf 已派)
-- **Phase 3 全能力**:✅ 完成(40 测试全绿;G1 审查 deleg_ce623ee6 已派)
-- **Phase 4 VS Code 原生**:✅ 代码完成(40 测试全绿;G2 交付门审查待派/已派)
-- **G2 交付门**:🔵 进行中(审查结果回来即收尾:tag + 最终 Checkbox)
+- **Phase 2 IDE-native**:✅ 完成(G1 FAIL→P1×4 已随 7e5df5c 修复,复检 PASS)
+- **Phase 3 全能力**:✅ 完成(G1 FAIL→P1×2 持久化死代码/投影竞态已修复)
+- **Phase 4 VS Code 原生**:✅ 完成(G2 交付门 P1×2 已修复 → **PASS**)
+- **G2 交付门**:✅ **通过**(P0/P1 清零;遗留 P2×13 记 final.md 跟踪;F 类人工项待 F5)
 
-> 当前状态:G2 交付门审查中。dsh web @ 3080 运行中;manual 验证(P1-14/P2-10/P3-9/§7 F 类)等你有空按 F5。
+> 当前状态:全部 5 个阶段完成,G2 交付门 PASS。F 类人工验收(§7 F1~F18、Q6/Q7/Q8、PK2)待你有空按 F5 勾选。
 
 ---
 
@@ -392,8 +392,8 @@
 - [x] P4-3 CodeLens / diagnostics action 可用(编辑器右键 "Ask to fix 诊断" + Code Action;CodeLens 无锚点,记录)
 - [x] P4-4 命令/菜单完整(5 命令 + editor/context 菜单;keybindings 建议记 README)
 - [x] P4-5 交付 Checkbox 预跑(Q1~Q3、PK1 自动化项通过;F 类功能项待人工 F5)
-- [ ] **G2 交付门通过**,记录 docs/reviews/phase-4.md + docs/reviews/final.md
-- [ ] 提交 + push + 打 tag
+- [x] **G2 交付门通过**(P1×2 修复后转 PASS;记录 docs/reviews/phase-4.md + docs/reviews/final.md)
+- [x] 提交 + push + 打 tag
 
 ---
 

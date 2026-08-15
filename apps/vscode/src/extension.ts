@@ -87,6 +87,25 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
+  /** P3-5:记住活跃会话(写 globalState;失败仅告警,不影响主流程) */
+  const rememberActiveSession = async (ctx: vscode.ExtensionContext, sessionId: string): Promise<void> => {
+    try {
+      await ctx.globalState.update('dsh.lastActiveSession', sessionId);
+    } catch (error) {
+      logger.warn(`持久化活跃会话失败:${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  /** P3-3:拉取子代理列表并推给 chat 面板(meta:subagents 请求与 interrupt 成功共用) */
+  const refreshSubagents = async (sessionId: string): Promise<void> => {
+    try {
+      const entries = await sessions.listSubagents(sessionId);
+      chatPanel.post({ type: 'meta:subagents', sessionId, entries });
+    } catch (error) {
+      chatPanel.post({ type: 'error', message: `子代理列表获取失败:${error instanceof Error ? error.message : String(error)}` });
+    }
+  };
+
   // ---- 状态栏 + cwd 一致性检测(P1-15) ----
   const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusItem.show();
@@ -149,11 +168,13 @@ export function activate(context: vscode.ExtensionContext): void {
       case 'session:open':
         state.value = request.sessionId;
         controller.setActiveSession(request.sessionId);
+        void rememberActiveSession(context, request.sessionId);
         await sessions.seedHistory(request.sessionId);
         break;
       case 'session:create': {
         const sessionId = await sessions.create();
         state.value = sessionId;
+        void rememberActiveSession(context, sessionId);
         controller.setActiveSession(sessionId);
         await refreshSessionList();
         break;
@@ -162,6 +183,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const childId = await sessions.fork(request.sessionId);
         state.value = childId;
         controller.setActiveSession(childId);
+        void rememberActiveSession(context, childId);
         await sessions.seedHistory(childId);
         chatPanel.post({ type: 'session:forked', sessionId: childId });
         await refreshSessionList();
@@ -179,12 +201,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
         break;
       case 'meta:subagents':
-        try {
-          const entries = await sessions.listSubagents(request.sessionId);
-          chatPanel.post({ type: 'meta:subagents', sessionId: request.sessionId, entries });
-        } catch (error) {
-          chatPanel.post({ type: 'error', message: `子代理列表获取失败:${error instanceof Error ? error.message : String(error)}` });
-        }
+        await refreshSubagents(request.sessionId);
         break;
       case 'meta:goals':
         chatPanel.post({ type: 'meta:goals', sessionId: request.sessionId, goal: sessions.goal(request.sessionId) });
@@ -210,7 +227,8 @@ export function activate(context: vscode.ExtensionContext): void {
       case 'subagent:interrupt':
         try {
           await sessions.interruptSubagent(request.parentSessionId, request.childSessionId);
-          chatPanel.post({ type: 'error', message: '已发送打断请求(子代理可在下一个检查点响应)' });
+          // P2-B:成功不进 error 通道(状态经 meta:subagents 刷新可见);失败才报错
+          void refreshSubagents(request.parentSessionId);
         } catch (error) {
           chatPanel.post({ type: 'error', message: `打断失败:${error instanceof Error ? error.message : String(error)}` });
         }
@@ -257,6 +275,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!sessionId) {
         sessionId = await sessions.create();
         state.value = sessionId;
+        void rememberActiveSession(context, sessionId);
       }
       controller.setActiveSession(sessionId);
       await sessions.seedHistory(sessionId);
@@ -373,6 +392,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // P3-5:会话持久化 — 记住上次活跃会话,重启后自动恢复(会话本体在实例侧,这里只存引用)
+  // P1-A 修复:persist 键必须写入才有恢复可言(之前只有 get,是死代码)
   const lastSession = context.globalState.get<string>('dsh.lastActiveSession');
   if (lastSession) {
     state.value = lastSession;
@@ -382,6 +402,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push({
     dispose: () => {
       controller.dispose();
+      runtime.dispose();
       disposables.dispose();
     },
   });

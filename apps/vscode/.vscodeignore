@@ -6,3 +6,6 @@ test/
 scripts/
 **/*.map
 **/*.tsbuildinfo
+tsconfig.json
+vitest.config.ts
+.oxlintrc.json

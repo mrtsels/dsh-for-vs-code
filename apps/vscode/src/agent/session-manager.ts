@@ -88,8 +88,9 @@ export class SessionManager {
         if (prev === undefined || frame.seq > prev.seq) {
           state.projections.set(frame.key, { value: frame.value, seq: frame.seq });
           if (frame.key === 'title' && typeof frame.value === 'string') state.title = frame.value;
+          // P2-E:仅在值被应用时通知(被 higher-seq-wins 拒绝的旧帧不打扰 UI)
+          this.onMeta?.(frame.sessionId, { projection: { key: frame.key, value: frame.value, seq: frame.seq } });
         }
-        this.onMeta?.(frame.sessionId, { projection: { key: frame.key, value: frame.value, seq: frame.seq } });
         break;
       }
       default:
@@ -123,11 +124,15 @@ export class SessionManager {
     state.events = events;
     if (events.length > 0) state.lastSeq = events[events.length - 1]!.seq;
     // projections 块:goal/title/sessionStats 等权威基线(history 恢复;live 靠 projection 帧增量)
+    // P1-B:history 是 asOfSeq 的快照,若 live 帧已带更高 seq 则不覆盖(与 handleMuxFrame 统一 higher-seq-wins)
     const projections = result.value.projections;
     if (projections) {
       for (const [key, value] of Object.entries(projections.values)) {
-        state.projections.set(key, { value, seq: projections.asOfSeq });
-        if (key === 'title' && typeof value === 'string') state.title = value;
+        const prev = state.projections.get(key);
+        if (prev === undefined || projections.asOfSeq > prev.seq) {
+          state.projections.set(key, { value, seq: projections.asOfSeq });
+          if (key === 'title' && typeof value === 'string') state.title = value;
+        }
       }
     }
     this.onEvents?.(sessionId, state.events);

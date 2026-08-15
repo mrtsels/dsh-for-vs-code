@@ -47,9 +47,10 @@ export function SessionList({ items, activeSessionId, onOpen, onCreate, onFork }
               </button>
               <button
                 type="button"
-                title="fork 此会话"
+                title={s.running ? 'fork 需要会话空闲(至少一个已完成回合)' : 'fork 此会话'}
                 onClick={() => onFork(s.sessionId)}
-                style={{ padding: '2px 6px', opacity: 0.7 }}
+                disabled={s.running}
+                style={{ padding: '2px 6px', opacity: s.running ? 0.3 : 0.7 }}
               >
                 ⧉
               </button>

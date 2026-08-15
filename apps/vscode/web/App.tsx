@@ -98,6 +98,11 @@ export function App(): React.JSX.Element {
   const openSession = useCallback((sessionId: string) => {
     setActiveSessionId(sessionId);
     setBanner(undefined);
+    // P2-G:切换会话先清空 meta 状态,防止旧会话数据残留到新 meta 到达前
+    setSkills([]);
+    setJobs([]);
+    setSubagents([]);
+    setGoal(undefined);
     post({ type: 'session:open', sessionId });
   }, []);
 
