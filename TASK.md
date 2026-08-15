@@ -9,12 +9,12 @@
 ## 进度快照(2026-08-15,随时更新)
 
 - **Phase 0 脚手架**:✅ 完成(G0 全绿;G1 FAIL→P1×3 修复 292e91c,复检 PASS)
-- **Phase 1 MVP**:✅ 完成(36 测试全绿,commit e45038c;G1 FAIL→P1×5 已随 Phase 2 commit 修复;P1-14 手动场景待 F5)
-- **Phase 2 IDE-native**:✅ 完成(36 测试全绿;G1 审查待派;P2-10 手动场景待 F5)
-- **Phase 3 全能力**:🔵 进行中
+- **Phase 1 MVP**:✅ 完成(40 测试全绿,commit e45038c;G1 FAIL→P1×5 已随 996aff9 修复)
+- **Phase 2 IDE-native**:✅ 完成(40 测试全绿;G1 审查 deleg_3930aeaf 已派)
+- **Phase 3 全能力**:✅ 完成(40 测试全绿;G1 审查待派;手动场景待 F5)
 - **Phase 4 VS Code 原生**:⬜ 未开始
 
-> 当前状态:Phase 3 开发中。dsh web @ 3080 运行中;manual 验证(§2.3 P1-14、§3.2 P2-10)等你有空按 F5。
+> 当前状态:Phase 4 开发中。dsh web @ 3080 运行中;manual 验证(P1-14/P2-10/P3-9)等你有空按 F5。
 
 ---
 
@@ -356,17 +356,17 @@
 
 ### 4.2 Phase 3 完成 Checklist
 
-- [ ] P3-1 MCP 状态可见
-- [ ] P3-2 skills 可用或已文档化降级
-- [ ] P3-3 subagents 活动可见/可停
-- [ ] P3-4 jobs 状态与输出可查
-- [ ] P3-5 会话持久化 + fork(或文档化降级)
-- [ ] P3-6 sandbox 状态可见
-- [ ] P3-7 goals 可见(或文档化降级)
-- [ ] P3-8 docs/gaps.md 完整(含每个缺口的上游期望)
-- [ ] P3-9 测试全绿 + 自测记录
+- [x] P3-1 MCP 状态可见(无 API 面 → docs/gaps.md #1,UI 不造轮子)
+- [x] P3-2 skills 可用或已文档化降级(skill.list → 洞察"技能"tab;启用无 API → gaps #4)
+- [x] P3-3 subagents 活动可见/可停(subagent.list/interrupt → "子代理"tab,continuable 可打断)
+- [x] P3-4 jobs 状态与输出可查(session/jobs 推送帧 → "任务"tab;取消无 API → gaps #2)
+- [x] P3-5 会话持久化 + fork(session.fork + globalState 恢复 + 列表 ⧉ 按钮)
+- [x] P3-6 sandbox 状态可见(无 RPC/投影 → gaps #3,投影通道已通用化)
+- [x] P3-7 goals 可见(history projections + 投影帧 → "Goals"tab 创建/暂停/恢复/完成/清除)
+- [x] P3-8 docs/gaps.md 完整(6 条缺口,含上游期望)
+- [x] P3-9 测试全绿 + 自测记录(40/40;docs/manual-tests/phase-3.md)
+- [x] P3-10 连接地址可配、切换生效(setBaseUrl 命令 + 配置事件统一 rebase)
 - [ ] **G1 Review(Phase 3)通过**(侧重:生命周期/disposer/降级诚实性),记录 docs/reviews/phase-3.md
-- [ ] P3-10 连接地址可配、切换生效
 - [ ] 提交 + push
 
 ---

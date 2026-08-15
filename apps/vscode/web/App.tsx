@@ -6,8 +6,9 @@ import { onMessage, post } from './bridge-client.js';
 import { ChatView } from './ChatView.js';
 import { SessionList } from './SessionList.js';
 import { StatusBar } from './StatusBar.js';
+import { InsightsTabs } from './InsightsTabs.js';
 import type { ConnectionState, ExtensionMessage } from '../src/webview/bridge.js';
-import type { SessionEvent, SessionSummary } from '../src/agent/wire.js';
+import type { GoalView, JobView, SessionEvent, SessionSummary, SkillEntry, SubagentEntry } from '../src/agent/wire.js';
 
 export function App(): React.JSX.Element {
   const [connState, setConnState] = useState<ConnectionState>('disconnected');
@@ -21,6 +22,11 @@ export function App(): React.JSX.Element {
   const [termInput, setTermInput] = useState('');
   const [termOutput, setTermOutput] = useState<string[]>([]);
   const [diagCount, setDiagCount] = useState<{ errors: number; warnings: number }>({ errors: 0, warnings: 0 });
+  const [view, setView] = useState<'chat' | 'insights'>('chat');
+  const [skills, setSkills] = useState<SkillEntry[]>([]);
+  const [jobs, setJobs] = useState<JobView[]>([]);
+  const [subagents, setSubagents] = useState<SubagentEntry[]>([]);
+  const [goal, setGoal] = useState<GoalView | undefined>();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pendingAsk = useRef(false); // P2-6:in-flight 防重(事件到达即解锁)
 
@@ -56,6 +62,21 @@ export function App(): React.JSX.Element {
         case 'diagnostics':
           setDiagCount({ errors: message.errors, warnings: message.warnings });
           break;
+        case 'meta:skills':
+          setSkills(message.skills);
+          break;
+        case 'meta:jobs':
+          setJobs(message.jobs);
+          break;
+        case 'meta:subagents':
+          setSubagents(message.entries);
+          break;
+        case 'meta:goals':
+          setGoal(message.goal);
+          break;
+        case 'session:forked':
+          openSession(message.sessionId);
+          break;
       }
     });
     post({ type: 'ready' });
@@ -85,6 +106,11 @@ export function App(): React.JSX.Element {
     post({ type: 'session:create' });
   }, []);
 
+  const forkSession = useCallback((sessionId: string) => {
+    setBanner(undefined);
+    post({ type: 'session:fork', sessionId });
+  }, []);
+
   const events = activeSessionId !== undefined ? (eventsBySession[activeSessionId] ?? []) : [];
 
   const runTerminal = useCallback(() => {
@@ -105,10 +131,22 @@ export function App(): React.JSX.Element {
       )}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <div style={{ width: 200, borderRight: '1px solid var(--vscode-editorWidget-border, #555)', overflowY: 'auto' }}>
-          <SessionList items={sessions} activeSessionId={activeSessionId} onOpen={openSession} onCreate={createSession} />
+          <SessionList items={sessions} activeSessionId={activeSessionId} onOpen={openSession} onCreate={createSession} onFork={forkSession} />
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <ChatView events={events} />
+          <div style={{ display: 'flex', gap: 8, padding: '2px 8px', borderBottom: '1px solid var(--vscode-editorWidget-border, #555)', fontSize: 12 }}>
+            <button type="button" onClick={() => setView('chat')} style={{ opacity: view === 'chat' ? 1 : 0.6 }}>
+              对话
+            </button>
+            <button type="button" onClick={() => setView('insights')} style={{ opacity: view === 'insights' ? 1 : 0.6 }}>
+              洞察
+            </button>
+          </div>
+          {view === 'insights' ? (
+            <InsightsTabs sessionId={activeSessionId} skills={skills} jobs={jobs} subagents={subagents} goal={goal} onPost={post} />
+          ) : (
+            <ChatView events={events} />
+          )}
           {termOpen && (
             <div style={{ borderTop: '1px solid var(--vscode-editorWidget-border, #555)', display: 'flex', flexDirection: 'column', maxHeight: '30%' }}>
               <div style={{ display: 'flex', gap: 6, padding: 6, alignItems: 'center' }}>

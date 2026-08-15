@@ -38,7 +38,9 @@ export interface HarnessRuntimeOptions {
 const DEFAULTS = { backoffBaseMs: 500, backoffFactor: 2, backoffMaxMs: 10_000, streamOpenTimeoutMs: 3_000 };
 
 export class HarnessRuntime {
-  private readonly opts: Omit<Required<HarnessRuntimeOptions>, 'onMuxFrame' | 'onHostFrame' | 'onStatus'>;
+  private readonly opts: Omit<Required<HarnessRuntimeOptions>, 'onMuxFrame' | 'onHostFrame' | 'onStatus' | 'baseUrl'>;
+  /** P3-10:目标实例地址(可变,rebase 切换) */
+  private baseUrl: string;
   /** 可赋值回调:解决 runtime 与 session-manager 的构造顺序依赖 */
   onMuxFrame?: (frame: MuxFrame, rpcId?: RpcId) => void;
   onHostFrame?: (frame: HostFrame, rpcId?: RpcId) => void;
@@ -56,8 +58,9 @@ export class HarnessRuntime {
   private lastDescription?: HostDescription;
 
   constructor(options: HarnessRuntimeOptions) {
-    const { onMuxFrame, onHostFrame, onStatus, ...rest } = options;
+    const { onMuxFrame, onHostFrame, onStatus, baseUrl, ...rest } = options;
     this.opts = { ...DEFAULTS, ...rest };
+    this.baseUrl = baseUrl;
     this.onMuxFrame = onMuxFrame;
     this.onHostFrame = onHostFrame;
     this.onStatus = onStatus;
@@ -75,6 +78,11 @@ export class HarnessRuntime {
     return this.state;
   }
 
+  /** P3-10:当前目标实例地址 */
+  get currentBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   get description(): HostDescription | undefined {
     return this.lastDescription;
   }
@@ -90,10 +98,27 @@ export class HarnessRuntime {
     return new Promise((resolve) => this.readyResolvers.push(resolve));
   }
 
+  /** P3-10:切换目标实例并立即重连(丢弃当前代,不改变订阅者) */
+  rebase(baseUrl: string): void {
+    if (this.disposed) return;
+    this.generation += 1;
+    this.baseUrl = baseUrl;
+    this.lastDescription = undefined;
+    this.readyResolvers = [];
+    this.mux?.close();
+    this.hostWs?.close();
+    this.mux = undefined;
+    this.hostWs = undefined;
+    this.attempt = 0;
+    this.started = false;
+    this.state = 'idle';
+    void this.loop();
+  }
+
   /** HTTP unary:POST /api/<method>,返回 result 槽;传输失败抛错。 */
   async request<T>(method: string, payload: unknown): Promise<RpcResult<T>> {
     if (this.disposed) throw new Error('runtime disposed');
-    const res = await fetch(`${this.opts.baseUrl}/api/${method}`, {
+    const res = await fetch(`${this.baseUrl}/api/${method}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(encodeClientRequest(method, payload)),
@@ -108,7 +133,7 @@ export class HarnessRuntime {
   /** 回应当前代 server-request(approval/question 等可应答帧),P2-5 */
   async respond(rpcId: RpcId, value: unknown): Promise<RpcResult<unknown>> {
     const envelope = { type: 'client-response', rpcId, result: { ok: true, value } };
-    const res = await fetch(`${this.opts.baseUrl}/api/respond`, {
+    const res = await fetch(`${this.baseUrl}/api/respond`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(envelope),
@@ -200,7 +225,7 @@ export class HarnessRuntime {
           reject(new Error(`ws open failed: ${url}`));
         };
       });
-    const base = this.opts.baseUrl.replace(/^http/, 'ws');
+    const base = this.baseUrl.replace(/^http/, 'ws');
     return Promise.all([
       open(`${base}/api/events.mux`),
       open(`${base}/api/events.host`),

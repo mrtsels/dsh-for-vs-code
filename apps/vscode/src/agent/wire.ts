@@ -74,6 +74,52 @@ export interface Chunk {
   [key: string]: unknown;
 }
 
+/** 后台任务视图(P3-4,jobs.d.ts JobView 子集,协议锁定) */
+export interface JobView {
+  id: string;
+  kind: string;
+  label: string;
+  status: 'running' | 'stopping' | 'completed' | 'killed' | 'failed';
+  detail?: string;
+  startedAt: number;
+  finishedAt?: number;
+}
+
+/** Skill 目录条目(P3-2,skills.d.ts SkillEntry) */
+export interface SkillEntry {
+  name: string;
+  description: string;
+  whenToUse?: string;
+  modelInvocable: boolean;
+}
+
+/** 子代理目录条目(P3-3,subagents.d.ts SubagentListEntry) */
+export type SubagentEntry =
+  | {
+      kind: 'child';
+      id: string;
+      activity: 'running' | 'inactive';
+      hasChildren: boolean;
+      mode: 'one-shot' | 'continuable';
+      label?: string;
+    }
+  | { kind: 'diagnostic'; id: string; reason: 'corrupt' | 'unsupported' | 'unavailable' };
+
+/** Goal 投影(P3-7,来自 session.history projections 或 session/projection 帧) */
+export interface GoalView {
+  goal: { id: string; revision: number; objective: string; phase: string; maxGoalRounds?: number };
+  roundsStarted: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** session.history 返回(含 projections 块) */
+export interface SessionHistoryResponse {
+  events: Array<{ event: SessionEvent }>;
+  hasMore: boolean;
+  projections?: { asOfSeq: number; values: Record<string, unknown> };
+}
+
 /** /api/events.mux 帧 union(events.d.ts 子集;未知类型帧由消费方 default 忽略) */
 export type MuxFrame =
   | { type: 'session/event'; sessionId: string; event: SessionEvent; view?: unknown }

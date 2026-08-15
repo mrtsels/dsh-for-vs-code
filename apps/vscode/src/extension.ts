@@ -60,6 +60,13 @@ export function activate(context: vscode.ExtensionContext): void {
     onEvents: (sessionId, events) => {
       chatPanel.post({ type: 'event', sessionId, events });
     },
+    onMeta: (sessionId, meta) => {
+      // P3-4/P3-7:jobs/goal 投影推送直转 UI(不改事件日志)
+      if (meta.jobs) chatPanel.post({ type: 'meta:jobs', sessionId, jobs: meta.jobs });
+      if (meta.projection) {
+        if (meta.projection.key === 'goal') chatPanel.post({ type: 'meta:goals', sessionId, goal: sessions.goal(sessionId) });
+      }
+    },
   });
   const controller = new AgentController(runtime, sessions, {
     onState: () => postState(),
@@ -149,6 +156,63 @@ export function activate(context: vscode.ExtensionContext): void {
         await refreshSessionList();
         break;
       }
+      case 'session:fork': {
+        const childId = await sessions.fork(request.sessionId);
+        state.value = childId;
+        controller.setActiveSession(childId);
+        await sessions.seedHistory(childId);
+        chatPanel.post({ type: 'session:forked', sessionId: childId });
+        await refreshSessionList();
+        break;
+      }
+      case 'meta:jobs':
+        chatPanel.post({ type: 'meta:jobs', sessionId: request.sessionId, jobs: sessions.jobs(request.sessionId) });
+        break;
+      case 'meta:skills':
+        try {
+          const skills = await sessions.listSkills(request.sessionId);
+          chatPanel.post({ type: 'meta:skills', sessionId: request.sessionId, skills });
+        } catch (error) {
+          chatPanel.post({ type: 'error', message: `技能列表获取失败:${error instanceof Error ? error.message : String(error)}` });
+        }
+        break;
+      case 'meta:subagents':
+        try {
+          const entries = await sessions.listSubagents(request.sessionId);
+          chatPanel.post({ type: 'meta:subagents', sessionId: request.sessionId, entries });
+        } catch (error) {
+          chatPanel.post({ type: 'error', message: `子代理列表获取失败:${error instanceof Error ? error.message : String(error)}` });
+        }
+        break;
+      case 'meta:goals':
+        chatPanel.post({ type: 'meta:goals', sessionId: request.sessionId, goal: sessions.goal(request.sessionId) });
+        break;
+      case 'goal:create':
+        try {
+          await sessions.goalCreate(request.sessionId, request.objective);
+          await sessions.seedHistory(request.sessionId); // 投影基线刷新
+          chatPanel.post({ type: 'meta:goals', sessionId: request.sessionId, goal: sessions.goal(request.sessionId) });
+        } catch (error) {
+          chatPanel.post({ type: 'error', message: `goal 创建失败:${error instanceof Error ? error.message : String(error)}` });
+        }
+        break;
+      case 'goal:control':
+        try {
+          await sessions.goalControl(request.sessionId, request.ref, request.action);
+          await sessions.seedHistory(request.sessionId);
+          chatPanel.post({ type: 'meta:goals', sessionId: request.sessionId, goal: sessions.goal(request.sessionId) });
+        } catch (error) {
+          chatPanel.post({ type: 'error', message: `goal 操作失败:${error instanceof Error ? error.message : String(error)}` });
+        }
+        break;
+      case 'subagent:interrupt':
+        try {
+          await sessions.interruptSubagent(request.parentSessionId, request.childSessionId);
+          chatPanel.post({ type: 'error', message: '已发送打断请求(子代理可在下一个检查点响应)' });
+        } catch (error) {
+          chatPanel.post({ type: 'error', message: `打断失败:${error instanceof Error ? error.message : String(error)}` });
+        }
+        break;
       case 'terminal:run':
         runCommandInTerminal(request.command, workspaceRoot || undefined, (text) => {
           chatPanel.post({ type: 'terminal:output', text });
@@ -264,6 +328,30 @@ export function activate(context: vscode.ExtensionContext): void {
   disposables.add(registerReview(app));
   disposables.add(statusItem);
 
+  // P3-10:连接切换命令(写入配置 + runtime.rebase)
+  disposables.add(
+    vscode.commands.registerCommand('deepseekHarness.setBaseUrl', async () => {
+      const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', 'http://127.0.0.1:3080');
+      const next = await vscode.window.showInputBox({
+        value: current,
+        prompt: 'dsh 实例地址(如 http://127.0.0.1:3080);任何实例都是第 N 个 viewer,扩展不另起 runtime',
+        validateInput: (v) => (/^https?:\/\/[^/]+/.test(v) ? undefined : '需为 http(s)://host[:port] 形式'),
+      });
+      if (next === undefined || next === current) return;
+      await vscode.workspace.getConfiguration('deepseekHarness').update('baseUrl', next.trim(), true);
+      // rebase 由 onDidChangeConfiguration 统一处理(单一路径,防重复重连)
+      cwdWarned = false;
+      void vscode.window.showInformationMessage(`DeepSeek Harness:正在连接 ${next.trim()}…`);
+    }),
+  );
+
+  // P3-5:会话持久化 — 记住上次活跃会话,重启后自动恢复(会话本体在实例侧,这里只存引用)
+  const lastSession = context.globalState.get<string>('dsh.lastActiveSession');
+  if (lastSession) {
+    state.value = lastSession;
+    controller.setActiveSession(lastSession);
+  }
+
   context.subscriptions.push({
     dispose: () => {
       controller.dispose();
@@ -276,7 +364,24 @@ export function activate(context: vscode.ExtensionContext): void {
     logger.info(`已连接 ${baseUrl}(cwd=${description.cwd},model=${description.model})`);
     void refreshSessionList();
     void postState();
+    if (lastSession) {
+      // 恢复上次会话历史 + 推送列表
+      void sessions.seedHistory(lastSession).then(() => chatPanel.post({ type: 'meta:goals', sessionId: lastSession, goal: sessions.goal(lastSession) }));
+    }
   });
+
+  // 记住活动会话(供下次启动恢复);配置变化统一在此 rebase(P3-10)
+  disposables.add(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('deepseekHarness.baseUrl')) {
+        const next = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', '');
+        if (next !== '' && next !== runtime.currentBaseUrl) {
+          runtime.rebase(next);
+          cwdWarned = false;
+        }
+      }
+    }),
+  );
 
   logger.info(`DeepSeek Harness 已激活(baseUrl=${baseUrl},workspace=${workspaceRoot || '(无)'})`);
 }

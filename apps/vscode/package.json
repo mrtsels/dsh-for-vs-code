@@ -32,6 +32,10 @@
       {
         "command": "deepseekHarness.review",
         "title": "DeepSeek Harness: Review Changes"
+      },
+      {
+        "command": "deepseekHarness.setBaseUrl",
+        "title": "DeepSeek Harness: 切换实例地址"
       }
     ],
     "configuration": {
