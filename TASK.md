@@ -16,9 +16,8 @@
 | --- | --- |
 | 一句话目标 | 给 DeepSeek Harness 增加一个 **VS Code Client/Profile**:复用 Agent Runtime / Cordis / Tools / Session / MCP / Skills,把浏览器壳换成 VS Code Extension + Webview |
 | MVP 路线 | **Route A**:VS Code → HTTP → `dsh web` runtime(端口 3080,难度低,先出 MVP) |
-| 终局路线 | **Route B**:Extension 直接内嵌 Harness runtime(难度中高) |
-| 禁止 | **Route C**(重写 agent-loop)、fork 上游、修改 `packages/core` / `agent-loop` |
-| 决策里程碑 | **M-3**(Phase 3 结束时):调研 Route B 可行性并决定是否迁移,记录决策到 `docs/decisions/` |
+| 终局路线 | 保持薄客户端:连接**任意 dsh web 实例**(地址可配),不内嵌 runtime、不另起实例 |
+| 禁止 | **Route C**(重写 agent-loop)、**Route B**(内嵌 runtime = 独立实例)、fork 上游、修改 `packages/core` / `agent-loop` |
 
 ### 0.2 环境基线(已实测,2025-08-15)
 
@@ -27,21 +26,23 @@
 | node | v22.22.3 | 满足上游 `^22.19 || >=24` |
 | pnpm | 本机 10.32.1;上游要求 11.7.0(corepack 按 `packageManager` 字段取) | 本仓库自定 `packageManager`;若引入上游包需对齐上游版本 |
 | dsh | **0.1.0-rc.6**(全局,~/.npm-global) | 必须锁版本,记录到 `docs/versions.md` |
-| dsh web | http://127.0.0.1:3080,运行中(HTTP 200) | 后台实例随会话结束而死,重开用 `npx @deepseek-ai/dsh web` |
-| git | 尚无仓库 | Phase 0 第一步 `git init`;**无 remote**,push 前需用户提供 |
+| dsh web | http://127.0.0.1:3080,运行中(HTTP 200);cwd=`/Users/minimx/dsh-for-vs-code`,模型已配 deepseek-v4-flash,attachedSessions=2 | 后台实例随会话结束而死,重开用 `npx @deepseek-ai/dsh web`;插件连的就是这个实例 |
+| git | 本地仓库已建(main,3 commits);remote 待建 | P0-1/P0-11 完成;push 待 `gh repo create --source . --push` |
 
 ### 0.3 已探明的 wire contract(写入 TASK 的协议笔记,Phase 1 只做验证 + 固化)
 
 来源:`@deepseek-ai/dsh-client-connection` + `dsh-host-webserver` README(rc.6 实测):
 
-- 传输:HTTP **POST** 单路由 `/api`(unary / respond 操作,Fetch bridge,体上限 160 MiB);
+- 传输:HTTP **POST** `/api/<method>`(前缀 `/api` 单路由、**端点在路径**,如 `/api/host.describe`;裸 `/api` 404;Fetch bridge,体上限 160 MiB);
+- 信封:`{type:"client-request", rpcId, method, payload}` → `{type:"server-response", rpcId, result:{ok:true,value}|{ok:false,error:{code,message,details}}}`;WS 帧是 `server-request` 全形(host→client);
 - 下行:两个 **WebSocket downlink**,仅服务端→客户端文本消息:
   - `/api/events.mux`(会话/工具事件)
   - `/api/events.host`(host 事件)
-- 就绪握手:`host.describe` HTTP 调用成功 **且** 两个 WS 均打开;
+- 就绪握手:`host.describe` HTTP 调用成功 **且** 两个 WS 均打开(实测 200:`{version:"0.0.1", cwd, provider:"deepseek-official", model:"deepseek-v4-flash", attachedSessions, canOpenPath}`);
 - 信任栅栏:loopback 权威(本机直连 127.0.0.1 即通过)或 `trustedHosts`;失败 403 / 拒绝握手;
 - 普通 GET 到 `/api/events.*` 返回 **426**(无 SSE 降级);
-- 方法名已知样例:`session.create`、`agentPreset.list` / `agentPreset.select`、`settings.describe` 等;完整方法面 Phase 1 探测确认;
+- 方法名已知样例:`host.describe`、`session.create`、`agentPreset.list` / `agentPreset.select`、`settings.describe` 等;完整方法面 Phase 1 探测确认;
+- mux 帧实测样例:`{"type":"server-request","method":"session/subscribed","payload":{"type":"session/subscribed","sessionId":"session-…","lastSeq":N}}`;
 - 服务端仅绑定 127.0.0.1(默认),**无鉴权**,禁止 `--host 0.0.0.0`;
 - **升级 dsh 后必须回归**(协议无稳定契约)。
 
@@ -52,7 +53,7 @@
 | Phase 0 | 工程脚手架 | 可 F5 的空壳扩展 + 构建/lint/test 流水线 | G0 | M0 |
 | Phase 1 | MVP(最小可用,Route A) | HTTP 桥 + Chat Webview + 会话流式渲染 | G0 + G1 | M1 |
 | Phase 2 | IDE-native | 编辑器上下文 / diagnostics / git diff / apply patch / terminal / 审批 | G0 + G1 | M2 |
-| Phase 3 | Harness 全能力 | MCP / skills / subagents / jobs / fork / resume / sandbox / goals | G0 + G1 | M3(+Route B 决策) |
+| Phase 3 | Harness 全能力 | MCP / skills / subagents / jobs / fork / resume / sandbox / goals / 连接管理 | G0 + G1 | M3 |
 | Phase 4 | VS Code 原生 | ChatParticipant / inline edit / code actions / CodeLens | G0 + G2(交付门) | M4 |
 
 ### 0.5 通用工程规范(所有阶段强制,违反即 Review FAIL)
@@ -158,10 +159,10 @@
 ### 2.1 阶段内设计决策(先定稿,写进 docs/http-bridge.md)
 
 - **D1 桥形态**:POST `/api` + 双 WS downlink(`events.mux` / `events.host`),就绪 = `host.describe` 成功 + 双 WS 打开。`src/agent/runtime.ts` **只做传输**,不含业务逻辑。
-- **D2 文件写路径(关键折衷,技术债 T-1)**:Route A 下 agent 跑在 dsh 进程内,它的 read/write 走 Harness 自己的 fs,**VS Code 无法截获**。策略:
+- **D2 文件写路径(固有边界,技术债 T-1,最终形态)**:agent 跑在 dsh 实例进程内,read/write 走 Harness 自己的 fs,**VS Code 无法截获**——这是"映射现有实例"的必然结果,不设"根治"目标。策略:
   - 方案 a(默认):扩展对 workspace 关键目录做 fs.watch + 快照对比,UI 提供 "查看 agent 改动 diff" 视图,支持一键回滚(记录快照);
   - 方案 b:全 patch 模式(agent 只产出 patch,VS Code 应用)——若协议探测发现可强制,优先 b;
-  - 两者都**不是**真正的 WorkspaceEdit 审批流;根治依赖 Route B,记入 §8 R3。
+  - 两者都**不是**真正的 WorkspaceEdit 审批流;接受为最终形态,记入 §8 R3。
 - **D3 会话模型**:优先用协议现有会话能力(`session.create` 等,探测确认);Phase 1 内存态即可,持久化留 Phase 3。
 - **D4 取消语义**:探测 runtime 的停止/取消方法;若无,降级为断开当前 generation 并重连(文档记录)。
 
@@ -237,6 +238,10 @@
 6. Ask "运行 pwd" → 集成终端执行
 7. 非法/损坏消息注入 bridge → 显式报错而非崩溃
 
+**P1-15 cwd 一致性检测**
+- 内容:握手成功后读 `host.describe.cwd`,与 VS Code 工作区根目录对比;不一致时状态栏/UI 明示 "实例 cwd = <path> ≠ 当前工作区"
+- 验证:手动:在 dsh-for-vs-code 之外打开文件夹 F5 → 警告出现;一致时不显示
+
 ### 2.3 Phase 1 完成 Checklist
 
 - [ ] P1-1 docs/http-bridge.md 定稿(含黄金事件样本),probe 脚本入库
@@ -253,6 +258,7 @@
 - [ ] P1-12 logger/disposer 就位
 - [ ] P1-13 测试全绿
 - [ ] P1-14 七条手动场景全部通过
+- [ ] P1-15 cwd 一致性检测生效(不一致有警告,一致无)
 - [ ] **G1 Review(Phase 1)通过**(审查侧重:桥的薄度/事件流正确性/webview 安全),记录 docs/reviews/phase-1.md
 - [ ] 提交 commit + push(remote 就绪后)
 
@@ -336,7 +342,7 @@
 - **P3-7 Goals**:创建/查看 goal 进度 UI(协议面探测后定)
 - **P3-8 协议缺口清单**:对每个探测失败的能力,产出 `docs/gaps.md`(能力 / 现象 / 降级方案 / 期望的上游接口),不私自扩展 runtime
 - **P3-9 测试 + 自测**:每条能力一条手动场景;单测覆盖新 UI 状态逻辑
-- **M-3 决策里程碑**:调研 Route B(内嵌 runtime:依赖包、API 面、Cordis 组合方式),输出 `docs/decisions/route-b.md`(结论 + 依据 + 迁移计划或否决理由)
+- **P3-10 连接管理(终局形态)**:dsh web 地址可配置(默认 `http://127.0.0.1:3080`,VS Code setting),连接状态/切换 UI;任何实例都是"第 N 个 viewer",不另起 runtime
 
 ### 4.2 Phase 3 完成 Checklist
 
@@ -350,7 +356,7 @@
 - [ ] P3-8 docs/gaps.md 完整(含每个缺口的上游期望)
 - [ ] P3-9 测试全绿 + 自测记录
 - [ ] **G1 Review(Phase 3)通过**(侧重:生命周期/disposer/降级诚实性),记录 docs/reviews/phase-3.md
-- [ ] **M-3 Route B 决策记录**落盘
+- [ ] P3-10 连接地址可配、切换生效
 - [ ] 提交 + push
 
 ---
@@ -365,7 +371,7 @@
 - **P4-2 Inline edit / code actions**:选中代码 → "dsh: 解释/修复" code action;inline edit 按协议能力做(不强制)
 - **P4-3 CodeLens / diagnostics action**:agent 输出中的建议点可一键触发;诊断条目右键 "Ask dsh to fix"
 - **P4-4 命令与菜单收尾**:command palette 全命令清单、editor context menu、keybindings 建议
-- **P4-5 全量回归**:§7 交付 Checkbox 预跑一遍;若 M-3 决策为迁移 Route B,此处为 Route B 落地窗口(计划另立)
+- **P4-5 全量回归**:§7 交付 Checkbox 预跑一遍
 - **P4-6 G2 交付门**:见 §6.2
 
 ### 5.2 Phase 4 完成 Checklist
@@ -540,10 +546,9 @@ pnpm build       # esbuild 双入口构建成功
 - [ ] **D2** docs/http-bridge.md:协议笔记(端点/消息/事件时间线/版本/日期)
 - [ ] **D3** docs/versions.md:全部依赖版本锁定
 - [ ] **D4** docs/gaps.md:协议缺口与降级说明
-- [ ] **D5** docs/decisions/route-b.md:M-3 决策记录
-- [ ] **D6** docs/reviews/:全部 review 记录齐全
-- [ ] **D7** 已知限制清单(T-1 技术债 + 迁移路径)在 README 明示
-- [ ] **D8** 合规:MIT 兼容(仅引官方包,无复制上游源码进本仓库)
+- [ ] **D5** docs/reviews/:全部 review 记录齐全
+- [ ] **D6** 已知限制清单(T-1:无法截获 agent 写盘,快照 diff + 回滚为最终形态)在 README 明示
+- [ ] **D7** 合规:MIT 兼容(仅引官方包,无复制上游源码进本仓库)
 
 ### 7.5 端到端演示路径(验收用,一次跑通)
 
@@ -564,12 +569,12 @@ pnpm build       # esbuild 双入口构建成功
 | --- | --- | --- | --- |
 | R1 | dsh web 协议变更(rc 版无稳定契约) | 桥失效 | 锁版本 + docs/http-bridge.md 回归 + 薄桥隔离 + 升级专项测试 |
 | R2 | Route A 拿不到终端输出 | F6 降级 | Phase 2 Pseudoterminal;仍不行则"集成终端 + UI 提示" |
-| R3 | Route A 无法截获 agent 写盘 → 无法真正 WorkspaceEdit 审批(T-1) | F5/F10 打折 | 方案 a(快照 diff + 回滚)+ patch 模式探索;根治依赖 Route B(M-3 决策) |
+| R3 | 映射现有实例 → 无法截获 agent 写盘 → 无法真正 WorkspaceEdit 审批(T-1,固有边界) | F5/F10 打折 | 方案 a(快照 diff + 回滚)+ patch 模式探索;接受为最终形态 |
 | R4 | 上游 breaking change(rc 节奏快) | 构建/运行失败 | 全量版本锁定;升级只做专项,带回归 |
 | R5 | VS Code 版本兼容(ESM 扩展/API 面) | 无法激活 | engines 约束 + 干净环境测试矩阵 |
-| R6 | 模型/API key 未配置 | headless 退出码 1,服务不可用 | README 明确配置(agent-default-model / DEEPSEEK_API_KEY);扩展启动时探测并提示 |
+| R6 | 模型/API key 未配置(仅影响全新实例;本机实例已配 deepseek-v4-flash) | headless 退出码 1,服务不可用 | README 明确配置(agent-default-model / DEEPSEEK_API_KEY);扩展启动时探测并提示 |
 | R7 | 事件流大(长会话/多子 agent) | UI 卡顿 | 节流 + 虚拟滚动 + 事件缓冲上限策略 |
-| R8 | 无 git remote | push 阻塞 | 用户提供 remote 前本地提交,记录待办 |
+| R8 | remote 未建(gh repo create 未执行成功) | push 阻塞 | 本地提交;网络恢复后 `gh repo create mrtsels/dsh-for-vs-code --public --source . --push` |
 | R9 | dsh web 绑定安全(无鉴权) | 本机端口被探测 | 保持 127.0.0.1;README 警示;不启用 0.0.0.0 |
 
 ---

@@ -4,8 +4,8 @@ DeepSeek Harness 的 VS Code 客户端(IDE frontend)。复用上游 Harness 的 
 
 ## 现状与路线
 
-- 全新项目:尚无 package.json / 源码 / git 仓库。本文件是第一个写脚手架的人/agent 的契约,写完后按它落地。
-- 路线(§18):MVP 走 **路线 A** — VS Code → HTTP → `dsh web` runtime(端口 3080,低难度);终局走 **路线 B** — Extension 直接内嵌 Harness runtime。**禁止路线 C**(重写 agent-loop)。
+- 全新项目:尚无 package.json / 源码(git 仓库与设计文档已就位)。本文件是第一个写脚手架的人/agent 的契约,写完后按它落地。
+- 路线:插件是**现有 `dsh web` 实例的客户端**(映射 3080 的 UI,不另起实例、不内嵌 runtime)。MVP 走 **路线 A** — VS Code → HTTP → `dsh web`(端口 3080);终局 = 连接地址可配。**禁止 Route C**(重写 agent-loop)与 **Route B**(内嵌 runtime)。
 - 目标布局(§12):`apps/vscode/` 下 `src/extension.ts`、`src/agent/{controller,runtime,session-manager}.ts`、`src/vscode/{workspace,terminal,editor,git,diagnostics}.ts`、`src/webview/{panel,bridge}.ts`、`src/commands/{ask,agent,review}.ts`、`web/`(React webview)。
 - package.json 贡献点(§13):`activationEvents` = `onStartupFinished` + `onView:deepseekHarness.chat`;命令 `deepseekHarness.open` / `deepseekHarness.ask`;activity bar 容器 `deepseekHarness` + view `deepseekHarness.chat`。
 

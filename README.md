@@ -8,8 +8,7 @@ DeepSeek Harness 的 VS Code 客户端。复用上游 [deepseek-harness](https:/
 
 实现路线:
 
-- **路线 A(MVP)** — VS Code ↔ HTTP ↔ `dsh web` Runtime,难度低
-- **路线 B(终局)** — VS Code Extension 直接内嵌 Harness Runtime
+- **路线 A(MVP → 终局)** — VS Code ↔ HTTP ↔ `dsh web` Runtime:插件是**现有 dsh web 实例的客户端**(映射 127.0.0.1:3080 的 UI,不另起实例);终局 = 连接地址可配
 
 路线图:Phase 1 最小可用(chat / streaming / session / 读写文件 / diff / 跑命令)→ Phase 2 IDE-native(编辑器上下文 / diagnostics / git diff / apply patch / terminal / 审批)→ Phase 3 全能力(MCP / skills / subagents / session fork / sandbox / goals)→ Phase 4 VS Code 原生(ChatParticipant / inline edit / CodeLens)。
 
