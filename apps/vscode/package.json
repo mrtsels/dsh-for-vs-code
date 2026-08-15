@@ -32,8 +32,22 @@
       {
         "command": "deepseekHarness.ask",
         "title": "DeepSeek Harness: Ask"
+      },
+      {
+        "command": "deepseekHarness.review",
+        "title": "DeepSeek Harness: Review Changes"
       }
     ],
+    "configuration": {
+      "title": "DeepSeek Harness",
+      "properties": {
+        "deepseekHarness.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:3080",
+          "description": "dsh web 实例地址(插件连接现有实例,不拉起新实例;仅 127.0.0.1 受信任)"
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -70,6 +84,7 @@
     "oxlint": "^0.15.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

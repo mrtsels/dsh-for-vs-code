@@ -244,23 +244,23 @@
 
 ### 2.3 Phase 1 完成 Checklist
 
-- [ ] P1-1 docs/http-bridge.md 定稿(含黄金事件样本),probe 脚本入库
-- [ ] P1-2 wire 类型 + 编解码单测
-- [ ] P1-3 runtime 薄桥:握手/双 WS/重连/dispose 全绿
-- [ ] P1-4 session-manager:append-only 缓冲,无自建模
-- [ ] P1-5 controller:状态机 + stop 语义正确
-- [ ] P1-6 panel 生命周期无泄漏
-- [ ] P1-7 bridge 白名单校验,非法消息不崩
-- [ ] P1-8 UI 纯事件驱动渲染,黄金样本回放正确,无 XSS 面
-- [ ] P1-9 workspace:WorkspaceEdit 工具 + 快照 diff(方案 a)
-- [ ] P1-10 terminal:集成终端执行
-- [ ] P1-11 三个命令可用
-- [ ] P1-12 logger/disposer 就位
-- [ ] P1-13 测试全绿
-- [ ] P1-14 七条手动场景全部通过
-- [ ] P1-15 cwd 一致性检测生效(不一致有警告,一致无)
+- [x] P1-1 docs/http-bridge.md 定稿(含黄金事件样本),probe 脚本入库
+- [x] P1-2 wire 类型 + 编解码单测
+- [x] P1-3 runtime 薄桥:握手/双 WS/重连/dispose 全绿(@live 实测;断连重连逻辑机器验证,UI 链路待 F5)
+- [x] P1-4 session-manager:append-only 缓冲,无自建模
+- [x] P1-5 controller:状态机 + stop 语义正确(协议验证;UI 交互待 F5)
+- [x] P1-6 panel 生命周期无泄漏(disposer 全量清理;真实面板待 F5)
+- [x] P1-7 bridge 白名单校验,非法消息不崩
+- [x] P1-8 UI 纯事件驱动渲染,黄金样本回放正确,无 XSS 面(display 派生单测;真实渲染待 F5)
+- [x] P1-9 workspace:WorkspaceEdit 工具 + 快照 diff(方案 a,diffLines 单测;watcher 待 F5)
+- [x] P1-10 terminal:集成终端执行(实现完成;执行待 F5)
+- [x] P1-11 三个命令可用(已注册;触发待 F5)
+- [x] P1-12 logger/disposer 就位
+- [x] P1-13 测试全绿(23/23,含 @live)
+- [ ] P1-14 七条手动场景全部通过(记录文档 docs/manual-tests/phase-1.md 已建,**待 F5 逐条勾选**)
+- [x] P1-15 cwd 一致性检测生效(实现完成;警告显示待 F5)
 - [ ] **G1 Review(Phase 1)通过**(审查侧重:桥的薄度/事件流正确性/webview 安全),记录 docs/reviews/phase-1.md
-- [ ] 提交 commit + push(remote 就绪后)
+- [x] 提交 commit + push(remote 已就绪)
 
 ---
 
