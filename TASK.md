@@ -8,7 +8,7 @@
 
 ## 进度快照(2026-08-15,随时更新)
 
-- **Phase 0 脚手架**:✅ 完成(G0 全绿;G1 FAIL→P1×3 修复 292e91c,复检 PASS)
+- **Phase 0 脚手架**:✅ 完成(G0 全绿;G1 FAIL→P1×3 修复 292e91c,复检 PASS,核验记录见 docs/reviews/phase-0.md)
 - **Phase 1 MVP**:✅ 完成(40 测试全绿,commit e45038c;G1 FAIL→P1×5 已随 996aff9 修复)
 - **Phase 2 IDE-native**:✅ 完成(G1 FAIL→P1×4 已随 7e5df5c 修复,复检 PASS)
 - **Phase 3 全能力**:✅ 完成(G1 FAIL→P1×2 持久化死代码/投影竞态已修复)

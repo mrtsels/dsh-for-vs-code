@@ -57,3 +57,31 @@ pnpm package    → vsce:9 files / 141.9KB VSIX,media+dist 全在    ✅
 
 - P1-1/P1-3 建议合并修复(读骨架 + 单点 nonce),修复后重跑 G0 并回发 reviewer 复检
 - P2 清单由主 agent 记入问题清单,随 Phase 1 跟踪(P2-1 应在 P1-6 前落实)
+
+## 修复核验记录(2026-08-15,HEAD d47b94c)
+
+> 审查基于 c448171;下列核验对照当前 HEAD(Phase 1~4 + 各轮 G1/G2 修复均已合入)。
+
+### P1 核验(3/3 已修复 ✅)
+
+1. **P1-1 ✅** — panel.ts:85 单次 `const n = nonce()`,`:90 .replaceAll('__NONCE__', n)` 单点替换;changes-panel.ts:79 同模式。两处 CSP 不再失配,面板可渲染。
+2. **P1-2 ✅** — pnpm-lock.yaml 已提交(292e91c),fresh clone 可复现。
+3. **P1-3 ✅** — 采用建议方案 (a):panel.ts:26-27 读取 `dist/web/index.html` 骨架,`:89-91` 做 __NONCE__ + src 单点替换;extension.ts 不再内联拼 HTML;nonce.ts 注释与实现一致。
+
+### P2 核验(8/9 已修复 ✅,1 项遗留)
+
+| # | 项 | 状态 |
+|---|---|---|
+| 1 | onDidDispose 入 disposer | ✅ panel.ts:48 / changes-panel.ts:49(DisposableSet 内,联动 dispose) |
+| 2 | style-src 'unsafe-inline' | ⚠️ 遗留:React inline style prop 所需;已记 gaps/final.md 跟踪 |
+| 3 | 包内 LICENSE/README | ✅ apps/vscode/LICENSE 已加(292e91c);VSIX 含 readme |
+| 4 | sourcemap 随 VSIX | ✅ .vscodeignore `**/*.map` |
+| 5 | no-undef off | ✅ 已从 .oxlintrc 移除 |
+| 6 | probe.mjs lint warning | ✅ 脚本区白名单,当前 lint 0 warning |
+| 7 | .serena/ 未忽略 | ✅ .gitignore 已加 |
+| 8 | launch/tasks 便携化 | ✅ 292e91c 提交便携版(.gitignore 白名单例外) |
+| 9 | TASK.md 笔误 | ✅ 已订正(包名无 scope、2026-08-15) |
+
+### 复检结论
+
+**Phase 0 转 PASS**(P1×3 全清,P2 仅 unsafe-inline 一项遗留并已登记跟踪;该遗留不影响交付门,已含在 final.md P2 清单 #12)。
