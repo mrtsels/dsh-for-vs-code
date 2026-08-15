@@ -30,7 +30,7 @@ async function askViaPanel(ctx: AppContext, question: string): Promise<void> {
   ctx.panel.open();
 }
 
-export function registerCodeActions(ctx: AppContext): vscode.Disposable {
+export function registerCodeActions(_ctx: AppContext): vscode.Disposable {
   return vscode.languages.registerCodeActionsProvider(
     '*',
     {

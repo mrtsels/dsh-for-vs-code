@@ -5,14 +5,15 @@
  */
 import * as vscode from 'vscode';
 import type { AppContext } from './context.js';
-import { extractContentText } from '../agent/context.js';
+import { createChatStreamState, stepChatStream } from './chat-stream.js';
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /**
  * 提问并把增量文本流式喂给 ChatResponseStream。
  * 实现:controller.ask 后轮询 session-manager 的 append-only 缓冲(事件日志权威),
- * 按 seq 增量取 assistant 文本;turn/end 结束;token 取消 → session.cancel。
+ * 由 stepChatStream 按 seq 水印增量消费(去重/消息-块去重/结束判定见 chat-stream.ts);
+ * token 取消 → session.cancel;运行时断连(事件不可能再到达)→ 显式收尾,不空转。
  */
 async function askAndStream(
   ctx: AppContext,
@@ -22,39 +23,39 @@ async function askAndStream(
   token: vscode.CancellationToken,
 ): Promise<void> {
   const before = ctx.sessions.snapshot(sessionId);
-  const startSeq = before.length > 0 ? before[before.length - 1]!.seq : -1;
-  let lastSeq = startSeq;
-  let acc = '';
+  const state = createChatStreamState(before.length > 0 ? before[before.length - 1]!.seq : -1);
   let flushTimer: NodeJS.Timeout | undefined;
 
   const flush = (): void => {
-    if (acc !== '') {
-      stream.markdown(acc);
-      acc = '';
+    if (state.acc !== '') {
+      stream.markdown(state.acc);
+      state.acc = '';
     }
   };
 
   const cancelled = token.onCancellationRequested(() => {
-    void ctx.controller.stop(sessionId);
+    // 取消 → 取消服务端 turn;stop 失败只记日志(吞掉,不打断取消流程)
+    void ctx.controller.stop(sessionId).catch((error) => {
+      ctx.logger.warn(`chat participant stop 失败:${error instanceof Error ? error.message : String(error)}`);
+    });
   });
 
   await ctx.controller.ask(sessionId, text);
   flushTimer = setInterval(flush, 400); // 每 400ms 刷一次累积增量(打字机效果)
   try {
     while (!token.isCancellationRequested) {
-      const events = ctx.sessions.snapshot(sessionId).filter((e) => e.seq > lastSeq);
-      for (const event of events) {
-        lastSeq = event.seq;
-        if (event.type === 'assistant/message') {
-          const t = extractContentText(event.data?.content);
-          if (t !== '') {
-            flush();
-            stream.markdown(t);
-          }
-        } else if (event.type === 'assistant/chunk') {
-          const chunk = event.data?.chunk as { type?: string; text?: string } | undefined;
-          if (chunk?.type === 'text-delta' && typeof chunk.text === 'string') acc += chunk.text;
-        } else if (event.type === 'turn/end') {
+      // 断连/切换实例后事件不会再到达,继续轮询只会空转 → flush 已累积文本并显式告知(网络失败对 UI 可见)
+      if (ctx.runtime.currentState !== 'connected') {
+        flush();
+        stream.markdown('*(与 dsh 实例的连接中断,本轮未完成;重新连接后可再次提问)*');
+        return;
+      }
+      const actions = stepChatStream(state, ctx.sessions.snapshot(sessionId));
+      for (const action of actions) {
+        if (action.kind === 'markdown') {
+          flush();
+          stream.markdown(action.text);
+        } else if (action.kind === 'end') {
           flush();
           return;
         }
