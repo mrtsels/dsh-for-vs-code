@@ -18,12 +18,16 @@ export function collectEditorContext(workspaceRoot: string): EditorContext {
   }
   const sel = editor.selection;
   if (!sel.isEmpty) {
+    // P2-3:选区文本限长,防超大选区整段注入模型上下文
+    const text = doc.getText(sel);
+    const MAX = 20_000;
+    const truncated = text.length > MAX ? `${text.slice(0, MAX)}\n…(已截断,共 ${text.length} 字符)` : text;
     const s: SelectionInfo = {
       startLine: sel.start.line + 1,
       startCol: sel.start.character + 1,
       endLine: sel.end.line + 1,
       endCol: sel.end.character + 1,
-      text: doc.getText(sel),
+      text: truncated,
     };
     ctx.selection = s;
   }

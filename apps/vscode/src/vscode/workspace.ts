@@ -89,13 +89,28 @@ export class SnapshotWatcher {
     return [...this.changes.values()].sort((a, b) => b.at - a.at);
   }
 
-  /** 一键回滚:恢复 before 内容(走 WorkspaceEdit,可 undo) */
+  /** 一键回滚:恢复 before 内容(走 WorkspaceEdit,可 undo);清记录 + 基线对齐防 watcher 自记录翻转 */
   async rollback(change: SnapshotChange): Promise<void> {
-    const editor = await vscode.workspace.openTextDocument(vscode.Uri.file(change.path));
-    const edit = new vscode.WorkspaceEdit();
-    const full = new vscode.Range(0, 0, editor.lineCount, 0);
-    edit.replace(editor.uri, full, change.before);
-    await vscode.workspace.applyEdit(edit);
+    const uri = vscode.Uri.file(change.path);
+    let editor: vscode.TextDocument | undefined;
+    try {
+      editor = await vscode.workspace.openTextDocument(uri);
+    } catch {
+      editor = undefined; // 文件已被删除 → 走重建分支(P1-2)
+    }
+    if (editor) {
+      const edit = new vscode.WorkspaceEdit();
+      const full = new vscode.Range(0, 0, editor.lineCount, 0);
+      edit.replace(editor.uri, full, change.before);
+      await vscode.workspace.applyEdit(edit);
+    } else {
+      // 文件已被删除:重建
+      await vscode.workspace.fs.writeFile(uri, Buffer.from(change.before, 'utf8'));
+    }
+    // 记录清除 + 基线对齐为回滚后内容 → watcher 400ms 事件对比无差异,不会重新入表/翻转
+    this.changes.delete(change.path);
+    this.snapshots.set(change.path, change.before);
+    this.onChanges?.([...this.changes.values()]);
   }
 
   /** 接受改动:清除记录并把基线更新为当前内容 */

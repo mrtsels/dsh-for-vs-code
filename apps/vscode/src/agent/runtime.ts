@@ -138,6 +138,11 @@ export class HarnessRuntime {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(envelope),
     });
+    if (res.status !== 200) {
+      // P1-4:非 200 显式抛错(与 request 对齐),调用方兜底拒绝
+      const text = await res.text().catch(() => '');
+      throw new Error(`wire: respond -> HTTP ${res.status} ${text.slice(0, 120)}`);
+    }
     const text = await res.text();
     return parseServerResponse<unknown>(text).result;
   }

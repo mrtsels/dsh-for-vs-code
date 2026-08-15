@@ -239,28 +239,35 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   const askWithContext = async (question: string): Promise<void> => {
-    // P2-1/P2-2:编辑器上下文 + 活动文件诊断 + (含 git 语义时)git 摘要 → 前缀注入
-    const editorCtx = collectEditorContext(workspaceRoot);
-    const activeFileDiag = collectDiagnostics(vscode.window.activeTextEditor?.document.uri);
-    const gitMap = new Map<string, { additions: number; deletions: number }>();
-    if (/git|status|diff|改动|未提交|commit|提交/i.test(question)) {
-      const g = await gitChanges(workspaceRoot);
-      for (const [path, v] of g.files) gitMap.set(path, { additions: v.additions, deletions: v.deletions });
-      if (g.error) logger.warn(`git 摘要失败:${g.error}`);
+    try {
+      // P2-1/P2-2:编辑器上下文 + 活动文件诊断 + (含 git 语义时)git 摘要 → 前缀注入
+      const editorCtx = collectEditorContext(workspaceRoot);
+      const activeFileDiag = collectDiagnostics(vscode.window.activeTextEditor?.document.uri);
+      const gitMap = new Map<string, { additions: number; deletions: number }>();
+      if (/git|status|diff|改动|未提交|commit|提交/i.test(question)) {
+        const g = await gitChanges(workspaceRoot);
+        for (const [path, v] of g.files) gitMap.set(path, { additions: v.additions, deletions: v.deletions });
+        if (g.error) logger.warn(`git 摘要失败:${g.error}`);
+      }
+      const full: EditorContext = { ...editorCtx, diagnostics: activeFileDiag, gitChanges: gitMap };
+      const block = formatEditorContext(full);
+      const finalText = block === '' ? question : `${block}\n\n${question}`;
+      await runtime.connect();
+      let sessionId = state.value;
+      if (!sessionId) {
+        sessionId = await sessions.create();
+        state.value = sessionId;
+      }
+      controller.setActiveSession(sessionId);
+      await sessions.seedHistory(sessionId);
+      await controller.ask(sessionId, finalText);
+      await refreshSessionList();
+    } catch (error) {
+      // P1-3:ask 失败必须对 UI 可见(pendingAsk 依赖 error 消息解锁)
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`ask 失败:${message}`);
+      chatPanel.post({ type: 'error', message: `提问失败:${message}` });
     }
-    const full: EditorContext = { ...editorCtx, diagnostics: activeFileDiag, gitChanges: gitMap };
-    const block = formatEditorContext(full);
-    const finalText = block === '' ? question : `${block}\n\n${question}`;
-    await runtime.connect();
-    let sessionId = state.value;
-    if (!sessionId) {
-      sessionId = await sessions.create();
-      state.value = sessionId;
-    }
-    controller.setActiveSession(sessionId);
-    await sessions.seedHistory(sessionId);
-    await controller.ask(sessionId, finalText);
-    await refreshSessionList();
   };
 
   // P2-5:approval 原生审批(approval/requested → 通知 → /api/respond)
@@ -268,23 +275,37 @@ export function activate(context: vscode.ExtensionContext): void {
     frame: Extract<MuxFrame, { type: 'approval/requested' }>,
     rpcId?: string,
   ): Promise<void> => {
-    if (!rpcId) {
-      logger.warn('approval 帧缺少 rpcId,自动拒绝');
-      return;
+    try {
+      if (!rpcId) {
+        // 无 rpcId 无法回传:按协议无法应答,提示 UI 但不击穿(P1-4)
+        logger.warn('approval 帧缺少 rpcId,无法应答');
+        void vscode.window.showWarningMessage('DeepSeek Harness:收到无法应答的工具审批请求(缺 rpcId)');
+        return;
+      }
+      const choice = await vscode.window.showInformationMessage(
+        `DeepSeek Harness:工具 "${frame.toolName}" 请求执行${frame.reason ? `(${frame.reason})` : ''}`,
+        { modal: false },
+        '允许一次',
+        '拒绝',
+      );
+      const outcome = choice === '允许一次' ? 'allowed-once' : 'rejected';
+      const result = await runtime.respond(rpcId, {
+        sessionId: frame.sessionId,
+        approvalId: frame.approvalId,
+        outcome,
+      });
+      if (!result.ok) logger.warn(`approval 回应失败:${result.error.code}:${result.error.message}`);
+    } catch (error) {
+      // P1-4:respond 传输失败(断连/HTTP 错误)不击穿;尽力兜底重试一次 rejected
+      logger.warn(`approval 流程异常:${error instanceof Error ? error.message : String(error)}`);
+      if (rpcId) {
+        try {
+          await runtime.respond(rpcId, { sessionId: frame.sessionId, approvalId: frame.approvalId, outcome: 'rejected' });
+        } catch {
+          // 吞掉:实例已不可达,服务端会自行超时;不再次外抛
+        }
+      }
     }
-    const choice = await vscode.window.showInformationMessage(
-      `DeepSeek Harness:工具 "${frame.toolName}" 请求执行${frame.reason ? `(${frame.reason})` : ''}`,
-      { modal: false },
-      '允许一次',
-      '拒绝',
-    );
-    const outcome = choice === '允许一次' ? 'allowed-once' : 'rejected';
-    const result = await runtime.respond(rpcId, {
-      sessionId: frame.sessionId,
-      approvalId: frame.approvalId,
-      outcome,
-    });
-    if (!result.ok) logger.warn(`approval 回应失败:${result.error.code}:${result.error.message}`);
   };
 
   const refreshSessionList = async (): Promise<void> => {

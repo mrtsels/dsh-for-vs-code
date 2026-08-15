@@ -34,7 +34,9 @@ class CapturingPty implements vscode.Pseudoterminal {
     if (child.stdout) child.stdout.on('data', write);
     if (child.stderr) child.stderr.on('data', write);
     child.on('error', (error) => {
+      // P2-9:启动失败也要收尾(否则死进程终端残留),fire close 供自回收
       this.writeEmitter.fire(`\r\n[dsh] 启动失败:${error.message}\r\n`);
+      this.closeEmitter.fire();
     });
     child.on('exit', (code) => {
       this.writeEmitter.fire(`\r\n[dsh] 命令退出,code=${code}\r\n`);

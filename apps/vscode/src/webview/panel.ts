@@ -18,8 +18,8 @@ export class ChatPanel {
   private panel: vscode.WebviewPanel | undefined;
   private readonly html: string;
   private readonly options: ChatPanelOptions;
-  /** 请求回调:构造后由 extension 接线(解决构造顺序依赖) */
-  onRequest: (request: WebviewRequest) => void = () => {};
+  /** 请求回调:构造后由 extension 接线(解决构造顺序依赖);支持 async,失败由调用点转 UI error */
+  onRequest: (request: WebviewRequest) => void | Promise<void> = () => {};
 
   constructor(options: ChatPanelOptions) {
     this.options = options;
@@ -59,7 +59,10 @@ export class ChatPanel {
           void vscode.window.showWarningMessage(`DeepSeek Harness:${error instanceof Error ? error.message : '非法消息'}`);
           return;
         }
-        this.onRequest(request);
+        // P1-3:处理函数(含 async)失败必须转 UI error,否则 webview 的 pendingAsk 锁死
+        void Promise.resolve(this.onRequest(request)).catch((error) => {
+          this.post({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+        });
       }),
     );
   }
