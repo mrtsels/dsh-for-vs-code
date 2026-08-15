@@ -374,6 +374,19 @@ export function activate(context: vscode.ExtensionContext): void {
   for (const d of registerNativeCommands(app)) disposables.add(d);
   disposables.add(statusItem);
 
+  // 活动栏 view provider:UI 本体是 webview panel,视图只提供"打开 Chat 面板"入口节点
+  // (缺 provider 会报 "no data provider registered";保留容器使活动栏图标可点)
+  disposables.add(
+    vscode.window.registerTreeDataProvider('deepseekHarness.chat', {
+      getChildren: () => [{ label: '打开 Chat 面板' }],
+      getTreeItem: (item: { label: string }) => ({
+        label: item.label,
+        iconPath: new vscode.ThemeIcon('comment-discussion'),
+        command: { command: 'deepseekHarness.open', title: '打开 Chat 面板' },
+      }),
+    }),
+  );
+
   // P3-10:连接切换命令(写入配置 + runtime.rebase)
   disposables.add(
     vscode.commands.registerCommand('deepseekHarness.setBaseUrl', async () => {
