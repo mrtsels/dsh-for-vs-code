@@ -20,10 +20,12 @@ import { DisposableSet } from './util/dispose.js';
 import { registerAsk } from './commands/ask.js';
 import { registerAgent } from './commands/agent.js';
 import { registerReview } from './commands/review.js';
+import { registerChatParticipant } from './commands/chat-participant.js';
+import { registerCodeActions, registerNativeCommands } from './commands/native.js';
 import type { AppContext } from './commands/context.js';
-import type { ConnectionState, WebviewRequest } from './webview/bridge.js';
+import type { WebviewRequest } from './webview/bridge.js';
 import type { RuntimeState } from './agent/runtime.js';
-import type { MuxFrame, SessionSummary } from './agent/wire.js';
+import type { MuxFrame } from './agent/wire.js';
 
 export function activate(context: vscode.ExtensionContext): void {
   const disposables = new DisposableSet();
@@ -321,11 +323,15 @@ export function activate(context: vscode.ExtensionContext): void {
     panel: chatPanel,
     changesPanel,
     watcher,
+    extensionUri: context.extensionUri,
     activeSessionId: state,
   };
   disposables.add(registerAsk(app));
   disposables.add(registerAgent(app));
   disposables.add(registerReview(app));
+  disposables.add(registerChatParticipant(app));
+  disposables.add(registerCodeActions(app));
+  for (const d of registerNativeCommands(app)) disposables.add(d);
   disposables.add(statusItem);
 
   // P3-10:连接切换命令(写入配置 + runtime.rebase)

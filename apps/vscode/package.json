@@ -36,8 +36,34 @@
       {
         "command": "deepseekHarness.setBaseUrl",
         "title": "DeepSeek Harness: 切换实例地址"
+      },
+      {
+        "command": "deepseekHarness.explainSelection",
+        "title": "dsh: 解释选中代码"
+      },
+      {
+        "command": "deepseekHarness.fixDiagnostic",
+        "title": "dsh: 修复此问题"
+      },
+      {
+        "command": "deepseekHarness.fixDiagnosticFromMenu",
+        "title": "dsh: Ask to fix 诊断"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "deepseekHarness.explainSelection",
+          "when": "editorHasSelection",
+          "group": "deepseekHarness@1"
+        },
+        {
+          "command": "deepseekHarness.fixDiagnosticFromMenu",
+          "when": "editorHasDiagnostics",
+          "group": "deepseekHarness@2"
+        }
+      ]
+    },
     "configuration": {
       "title": "DeepSeek Harness",
       "properties": {

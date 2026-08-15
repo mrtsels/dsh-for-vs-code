@@ -11,10 +11,11 @@
 - **Phase 0 脚手架**:✅ 完成(G0 全绿;G1 FAIL→P1×3 修复 292e91c,复检 PASS)
 - **Phase 1 MVP**:✅ 完成(40 测试全绿,commit e45038c;G1 FAIL→P1×5 已随 996aff9 修复)
 - **Phase 2 IDE-native**:✅ 完成(40 测试全绿;G1 审查 deleg_3930aeaf 已派)
-- **Phase 3 全能力**:✅ 完成(40 测试全绿;G1 审查待派;手动场景待 F5)
-- **Phase 4 VS Code 原生**:⬜ 未开始
+- **Phase 3 全能力**:✅ 完成(40 测试全绿;G1 审查 deleg_ce623ee6 已派)
+- **Phase 4 VS Code 原生**:✅ 代码完成(40 测试全绿;G2 交付门审查待派/已派)
+- **G2 交付门**:🔵 进行中(审查结果回来即收尾:tag + 最终 Checkbox)
 
-> 当前状态:Phase 4 开发中。dsh web @ 3080 运行中;manual 验证(P1-14/P2-10/P3-9)等你有空按 F5。
+> 当前状态:G2 交付门审查中。dsh web @ 3080 运行中;manual 验证(P1-14/P2-10/P3-9/§7 F 类)等你有空按 F5。
 
 ---
 
@@ -386,11 +387,11 @@
 
 ### 5.2 Phase 4 完成 Checklist
 
-- [ ] P4-1 ChatParticipant 可用(或决策记录说明不做)
-- [ ] P4-2 code actions / inline 可用
-- [ ] P4-3 CodeLens / diagnostics action 可用
-- [ ] P4-4 命令/菜单完整
-- [ ] P4-5 交付 Checkbox 预跑全过
+- [x] P4-1 ChatParticipant 可用(registerChatParticipant:prompt → session.prompt → 流式 markdown;不做双模型)
+- [x] P4-2 code actions / inline 可用(解释选中/修复诊断 Code Actions;inline edit 无稳定协议面,记录)
+- [x] P4-3 CodeLens / diagnostics action 可用(编辑器右键 "Ask to fix 诊断" + Code Action;CodeLens 无锚点,记录)
+- [x] P4-4 命令/菜单完整(5 命令 + editor/context 菜单;keybindings 建议记 README)
+- [x] P4-5 交付 Checkbox 预跑(Q1~Q3、PK1 自动化项通过;F 类功能项待人工 F5)
 - [ ] **G2 交付门通过**,记录 docs/reviews/phase-4.md + docs/reviews/final.md
 - [ ] 提交 + push + 打 tag
 

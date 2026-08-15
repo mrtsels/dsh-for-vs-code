@@ -53,3 +53,17 @@ export function formatEditorContext(ctx: EditorContext): string {
   }
   return parts.length === 0 ? '' : `<editor-context>\n${parts.join('\n')}\n</editor-context>`;
 }
+
+/** 从 PromptContentPart 数组提取纯文本(P4-1 ChatParticipant 复用;形状与 display.ts contentText 对齐) */
+export function extractContentText(content: unknown): string {
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part) => {
+      if (typeof part === 'object' && part !== null) {
+        const p = part as { type?: string; text?: unknown };
+        if (p.type === 'text' && typeof p.text === 'string') return p.text;
+      }
+      return '';
+    })
+    .join('');
+}

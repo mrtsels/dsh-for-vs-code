@@ -1,6 +1,7 @@
 /**
  * context.ts — 命令层共享的应用上下文(extension.ts 组装后注入)。
  */
+import * as vscode from 'vscode';
 import type { AgentController } from '../agent/controller.js';
 import type { HarnessRuntime } from '../agent/runtime.js';
 import type { SessionManager } from '../agent/session-manager.js';
@@ -17,6 +18,7 @@ export interface AppContext {
   panel: ChatPanel;
   changesPanel: ChangesPanel;
   watcher: SnapshotWatcher;
+  extensionUri: vscode.Uri;
   /** 当前活动会话(共享 holder,extension 与命令层同引用) */
   activeSessionId: { value?: string };
 }
