@@ -12,10 +12,6 @@
   },
   "type": "module",
   "main": "./dist/extension.js",
-  "files": [
-    "dist",
-    "media"
-  ],
   "engines": {
     "vscode": "^1.95.0"
   },

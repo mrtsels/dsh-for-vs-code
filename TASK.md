@@ -19,7 +19,7 @@
 | 终局路线 | 保持薄客户端:连接**任意 dsh web 实例**(地址可配),不内嵌 runtime、不另起实例 |
 | 禁止 | **Route C**(重写 agent-loop)、**Route B**(内嵌 runtime = 独立实例)、fork 上游、修改 `packages/core` / `agent-loop` |
 
-### 0.2 环境基线(已实测,2025-08-15)
+### 0.2 环境基线(已实测,2026-08-15)
 
 | 项 | 值 | 备注 |
 | --- | --- | --- |
@@ -98,7 +98,7 @@
   - `"activationEvents": ["onStartupFinished", "onView:deepseekHarness.chat"]`
   - contributes:`deepseekHarness.open` / `deepseekHarness.ask` 命令;activity bar 容器 `deepseekHarness` + view `deepseekHarness.chat`;icon `media/deepseek.svg`
   - devDeps:typescript、esbuild、@types/vscode、@types/node、@types/react、@types/react-dom、react、react-dom、oxlint、vitest、@vscode/vsce
-- 验证:`pnpm --filter @deepseek-ai/dsh-for-vs-code install` 成功
+- 验证:`pnpm --filter dsh-for-vscode install` 成功(包名不带 scope,避免冒充官方 @deepseek-ai/*)
 
 **P0-4 `apps/vscode/tsconfig.json`**
 - 要点:`"strict": true`、`"module": "NodeNext"`、`"moduleResolution": "NodeNext"`、`"target": "ES2023"`、`"noEmit": true`(esbuild 负责产物)、ESM 语义

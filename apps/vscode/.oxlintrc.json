@@ -1,10 +1,20 @@
 {
   "ignorePatterns": ["dist", "node_modules"],
+  "env": {
+    "node": true
+  },
   "overrides": [
     {
       "files": ["scripts/**"],
       "rules": {
         "no-console": "off"
+      }
+    },
+    {
+      "files": ["web/**", "test/**"],
+      "env": {
+        "browser": true,
+        "node": true
       }
     }
   ],
@@ -12,7 +22,6 @@
     "no-console": "warn",
     "no-unused-vars": "warn",
     "no-constant-binary-expression": "error",
-    "no-unreachable": "error",
-    "no-undef": "off"
+    "no-unreachable": "error"
   }
 }

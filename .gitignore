@@ -1,7 +1,10 @@
 node_modules/
 dist/
 *.vsix
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 .DS_Store
 .env
+.serena/
 references/
