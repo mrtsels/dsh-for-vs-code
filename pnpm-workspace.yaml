@@ -1,5 +1,7 @@
 packages:
   - apps/*
+  # 注意:上游 vendor/deepseek-harness 是独立 workspace(自带 pnpm-workspace.yaml),
+  # 嵌套 workspace 不能并入外层;定制构建用 vite alias 源码直引(见 build 配置)
 
 # pnpm 10+ 默认拦截依赖构建脚本;这里只批准确有需要的(esbuild 原生二进制、vsce 签名)
 onlyBuiltDependencies:

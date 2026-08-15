@@ -53,9 +53,13 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   );
   // 主 UI = 活动栏侧边栏视图(WebviewView,内嵌 dsh 原生 UI);ChatPanel(编辑器面板)不再使用
-  const chatView = new ChatViewProvider(() => vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl));
+  const chatView = new ChatViewProvider({
+    extensionUri: context.extensionUri,
+    getBaseUrl: () =>
+      vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+  });
   const chatPanel: ChatPanelHost = {
-    open: () => chatView.reveal(),
+    open: () => chatView.open(),
     post: (message) => chatView.post(message),
     reload: (url) => chatView.reload(url),
   };
