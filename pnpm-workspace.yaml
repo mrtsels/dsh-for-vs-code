@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+
+# pnpm 10+ 默认拦截依赖构建脚本;这里只批准确有需要的(esbuild 原生二进制、vsce 签名)
+onlyBuiltDependencies:
+  - esbuild
+  - '@vscode/vsce-sign'
+  - keytar

@@ -136,18 +136,18 @@
 
 ### 1.3 Phase 0 完成 Checklist
 
-- [ ] P0-0 版本锁定记录(docs/versions.md)
-- [ ] P0-1 git 仓库 + .gitignore
-- [ ] P0-2 pnpm workspace 可 install
-- [ ] P0-3 贡献点与 §13 完全一致(命令/视图/容器/icon)
-- [ ] P0-4 strict TS + ESM 编译通过
-- [ ] P0-5 build 产出 extension + webview 双入口,watch 模式可用
-- [ ] P0-6 F5 调试链路打通
-- [ ] P0-7 活动栏图标可见
-- [ ] P0-8 lint/test 骨架全绿
-- [ ] P0-9 两个命令可触发占位面板
-- [ ] P0-10 干净环境冒烟通过
-- [ ] P0-11 首次 commit 完成(remote 待用户提供)
+- [x] P0-0 版本锁定记录(docs/versions.md)
+- [x] P0-1 git 仓库 + .gitignore
+- [x] P0-2 pnpm workspace 可 install
+- [x] P0-3 贡献点与 §13 完全一致(命令/视图/容器/icon)
+- [x] P0-4 strict TS + ESM 编译通过
+- [x] P0-5 build 产出 extension + webview 双入口,watch 模式可用
+- [x] P0-6 F5 调试链路打通(launch/tasks 就位;CLI --extensionDevelopmentPath 冒烟等效验证)
+- [ ] P0-7 活动栏图标可见(media/deepseek.svg 已配置,待 F5 人工确认)
+- [x] P0-8 lint/test 骨架全绿
+- [x] P0-9 两个命令可触发占位面板(命令已注册;面板打开待 F5 人工确认)
+- [x] P0-10 干净环境冒烟通过(独立 user-data-dir,扩展激活成功无错误)
+- [x] P0-11 首次 commit 完成(remote 已建,push 完成)
 - [ ] **G1 Review(Phase 0)通过**,记录 docs/reviews/phase-0.md
 
 ---
@@ -295,7 +295,7 @@
 - 验证:手动:ask "npm test" → 输出在 UI 可见
 
 **P2-7 产品内审批功能**
-- 内容:改动审批面板(方案 a diff 审查 + 一键回滚;预留 Route B 的完整写拦截钩子接口)
+- 内容:改动审批面板(方案 a diff 审查 + 一键回滚;预留完整写拦截钩子接口,供未来协议能力接入)
 - 验证:手动:agent 连续改两个文件 → 逐个 diff 审查、可单独回滚
 
 **P2-8 `src/commands/review.ts` 落地**

@@ -1,0 +1,18 @@
+{
+  "name": "dsh-for-vscode-root",
+  "private": true,
+  "version": "0.0.1",
+  "license": "MIT",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter dsh-for-vscode run build",
+    "watch": "pnpm --filter dsh-for-vscode run watch",
+    "typecheck": "pnpm --filter dsh-for-vscode run typecheck",
+    "lint": "pnpm --filter dsh-for-vscode run lint",
+    "test": "pnpm --filter dsh-for-vscode run test",
+    "package": "pnpm --filter dsh-for-vscode run package"
+  }
+}

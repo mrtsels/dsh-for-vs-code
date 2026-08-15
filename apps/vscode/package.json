@@ -1,0 +1,76 @@
+{
+  "name": "dsh-for-vscode",
+  "displayName": "DeepSeek Harness for VS Code",
+  "description": "DeepSeek Harness 的 VS Code 客户端:映射现有 dsh web 实例(127.0.0.1:3080)的 Agent UI",
+  "version": "0.0.1",
+  "publisher": "mrtsels",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mrtsels/dsh-for-vs-code.git"
+  },
+  "type": "module",
+  "main": "./dist/extension.js",
+  "files": [
+    "dist",
+    "media"
+  ],
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:deepseekHarness.chat"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "deepseekHarness.open",
+        "title": "DeepSeek Harness: Open"
+      },
+      {
+        "command": "deepseekHarness.ask",
+        "title": "DeepSeek Harness: Ask"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "deepseekHarness",
+          "title": "DeepSeek",
+          "icon": "media/deepseek.svg"
+        }
+      ]
+    },
+    "views": {
+      "deepseekHarness": [
+        {
+          "id": "deepseekHarness.chat",
+          "name": "Chat"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint .",
+    "test": "vitest run",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.25.0",
+    "oxlint": "^0.15.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
