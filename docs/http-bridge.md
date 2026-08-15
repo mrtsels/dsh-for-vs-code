@@ -2383,3 +2383,91 @@
   }
 }
 ```
+
+---
+
+# Phase 3 探测实录(2026-08-15,dsh 0.1.0-rc.6)
+
+> 本轮目标:P3-1~P3-7 涉及的端点逐条实测,产出 P3-8 `docs/gaps.md` 依据。
+> 脚本:`apps/vscode/scripts/probe-phase3.mjs`(重跑:连 3080 后 `node scripts/probe-phase3.mjs`)。
+> 原始结果(全量帧样本、30 条 unary 逐条记录):`docs/probe-phase3-result.json`。
+
+## P3-A unary 端点实测(30 调用:25 ok / 4×404 / 1 负向 bad-request)
+
+| 方法 | 载荷 | 结果 | 备注 |
+| --- | --- | --- | --- |
+| `host.describe` | `{}` | ✅ | `{version:"0.0.1", cwd, provider, model, attachedSessions, canOpenPath}` |
+| `session.list` | `{}` | ✅ | `items[]:{sessionId,updatedAt,running,blank,cwd,agentPreset,title}`;blank=无 turn 的会话 |
+| `workspace.list` | `{}` | ✅ | `items[]:{workspaceId,path,title,…}`,`archivedSessionIds[]` |
+| `settings.describe` | `{}` | ✅ | `{writable, hasDocument, namespaces[]}`(namespaces 含 ui-theme/llm-deepseek 等 schema) |
+| `llm.providers` | `{}` | ✅ | `providers[]:{provider,displayName,settingsNs,…}` |
+| `llm.models` | `{}` | ✅ | `groups[]:{id,name,models[]:{id,name,reasoning,…}}` |
+| `agentPreset.list` | `{}` | ✅ | `presets[]:{id,trust,isDefault,name,description}` |
+| `credentials.describe` | `{refs:[]}` | ✅ | **必填 `refs` 数组**(≤64);`{credentials:{}}`;缺 refs → bad-request |
+| `skill.list` | `{sessionId}` | ✅ | `skills[]:{name,description,whenToUse?,modelInvocable}`(实测 ego-browser,modelInvocable=true) |
+| `subagent.list` | `{parentSessionId}` | ✅ | `{entries[], parentAvailable}`;缺 parentSessionId → bad-request |
+| `session.history` | `{sessionId,maxMessages}` | ✅ | `events[]:{event:{type,seq,time,data}}`(append-only 重放,resume 用) |
+| `session.create` | `{}` | ✅ | `{sessionId, agentPreset}`(workspaceId/cwd 二选一,可省略) |
+| `session.rename` | `{sessionId,title}` | ✅ | `{title(规范化), seq}` |
+| `session.cancel` | `{sessionId}` | ✅ | `{accepted:true}`(空闲会话也可调) |
+| `session.fork` | `{sessionId,atSeq?}` | ✅ | **前置:至少一个 completed turn**(否则 `fork-unavailable`);atSeq 锚定完成的 turn 切口 |
+| `workspace.archiveSession` | `{sessionId}` | ✅ | 返回完整 `archivedSessionIds[]`;会触发 host 帧 `host/archived-sessions-changed` |
+| `goal.create` | `{sessionId,objective,maxGoalRounds?}` | ✅ | `{ref:{id,revision}}`;**per-session 单例**,已有 goal 时拒绝(GoalError already exists) |
+| `goal.edit` | `{sessionId,ref,objective?/maxGoalRounds?}` | ✅ | revision+1;ref 必须最新(见 CAS 语义) |
+| `goal.pause` / `goal.resume` / `goal.complete` | `{sessionId,ref}` | ✅ | 每次 mutation revision+1,响应返回最新 ref |
+| `goal.clear` | `{sessionId,ref}` | ✅ | `{cleared:true}`;**ref 必填**(缺 ref → bad-request) |
+| `session.prompt` | `{sessionId,mode:"queue"|"steer",content:[{type:"text",text}]}` | ✅ | `{accepted:true}`;queue 排在当前 turn 后 |
+| `mcp.list` | - | 404 | **MCP 无 unary API**(仅工具注册,见 gaps.md) |
+| `jobs.list` | - | 404 | **jobs 仅推送帧**(`session/jobs`),无查询端点 |
+| `goal.list` | - | 404 | **goals 无列表端点**,事件源式(`goal/change` 事件 + projection) |
+| `sandbox.describe` | - | 404 | **sandbox 无查询端点**,状态走事件(`sandbox/mode` 等) |
+
+### goal CAS 语义(实测,重要)
+
+- ref = `{id, revision}`;**每次 edit/pause/resume/complete 都 revision+1**,响应返回最新 ref;
+- 用旧 ref 调任意 mutation → `internal:GoalError: stale goal ref "<id>" revision N; current is "<id>" revision M`(**错误消息里带当前 revision**,可自适应重试);
+- **UI 必须链式取每次响应的 ref**,不可复用旧值;
+- goal 创建后驱动轮会自动跑(实测 1 轮后 phase 变 complete),自主轮会真实干活(见 gaps.md 的副作用警告);
+- 实测完整链:create(rev1)→edit(rev2)→pause(rev3)→resume(rev4)→complete(rev5)→clear ✅。
+
+### 其余 bundle 内确认、未实测的方法(来自 rc.6 已装包,非猜测)
+
+- session:`session.attachment`(图片,见 promptContentPart)、`session.search`、`session.updateQueue`、`session.selectModel`、`session.models`
+- subagent:`subagent.history`、`subagent.prompt`、`subagent.interrupt`(`{parentSessionId, childSessionId, mode:"continuable"}` → `{accepted:true}`)
+- settings:`settings.update` / `settings.replace` / `settings.mutate` / `settings.openDocument`
+- credentials:`credentials.set` / `credentials.unset`
+- workspace:`workspace.create` / `workspace.delete` / `workspace.rename` / `workspace.insertSessionBefore`
+- host:`host.listDirectory` / `host.createDirectory` / `host.openPath` / `host.pickDirectory`
+- llm:`llm.discoverModels`(`{settingsNs,provider?,baseURL?,api?,apiKey?}`)
+
+## P3-B WS 帧实测(双 downlink,~90s 窗口)
+
+### events.mux(648 帧,5 种 method)
+
+| method | 数量 | 载荷形状(实测样本) |
+| --- | --- | --- |
+| `session/event` | 550 | `{type:"session/event", sessionId, event:{type,seq,time,data}}`(全部会话的事件都在这一条流里) |
+| `session/projection` | 73 | `{type:"session/projection", sessionId, key, value, seq}`;实测 key=`permissions`:`{options:[{value,name}], currentValue}` |
+| `session/jobs` | 5 | `{type:"session/jobs", sessionId, jobs:[{id,kind,label,status,detail?,startedAt,finishedAt?}]}`——**全量快照,收到即替换** |
+| `session/subscribed` | 18 | `{type:"session/subscribed", sessionId, lastSeq}`(mux 打开即对所有会话各发一条基线) |
+| `session/queue` | 2 | `{type:"session/queue", sessionId, items:[{id,placement,message:{content:[…]}}]}`(排队提示) |
+
+> 实测 jobs 帧:`session/jobs` 在 job 创建(running)与结束(completed,带 `detail:"exit code: 0"`)各推一次;
+> 连本会话自己后台跑的 probe 进程(bash-1/bash-3)都会作为 job 出现在帧里。
+
+### events.host(6 帧,3 种 method)
+
+| method | 载荷形状(实测样本) |
+| --- | --- |
+| `host/session-added` | `{type:"host/session-added", sessionId, blank, cwd, agentPreset}` |
+| `host/archived-sessions-changed` | `{type:"host/archived-sessions-changed", archivedSessionIds[]}`(archive/恢复会话时推)**⚠ wire.ts HostFrame union 缺失此类型,需补** |
+| `host/session-status` | `{type:"host/session-status", sessionId, running}` |
+
+## P3-C 事件词汇补充(scratch 会话实测,事件源重建素材)
+
+`permission/preset`、`sandbox/mode`、`approval/policy`、`approval/asked`、`goal/change`、`agent/inbox/spliced`、`turn/start|end`、`step/start|end`、`user/message`、`request/header`、`request/context`、`session/title`、`assistant/chunk|message`、`tool/call|result`、`tool-workflow/agent-start|end`、`subagent/descriptor`、`todo/write`、`plan/mode`、`command/run|done`、`schedule/change`、`compaction/*`、`llm/retry*`、`session/end-seed`、`feedback/record`、`approval/decided`、`hook/*`、`web/deepseek-search-llm-request`、`agent-preset/selected`、`session/title-llm-request`(完整 KNOWN 列表见 rc.6 `dsh-session` 包)
+
+## P3-D 洪水实测(R7 量化)
+
+- 90s 窗口内 mux 收到 550~666 条 `session/event`(另一个会话在流式输出时,首个窗口 13255 帧);
+- **mux 不按会话过滤,所有 attached 会话的事件全量下发**;扩展侧 session-manager 按 sessionId 分桶缓冲是正确做法,长会话需节流/上限策略(R7)。

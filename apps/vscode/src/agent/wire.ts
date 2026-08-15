@@ -138,6 +138,7 @@ export type HostFrame =
   | { type: 'host/session-added'; sessionId: string; blank: boolean; cwd?: string; agentPreset?: string }
   | { type: 'host/session-removed'; sessionId: string }
   | { type: 'host/session-status'; sessionId: string; running: boolean }
+  | { type: 'host/archived-sessions-changed'; archivedSessionIds: string[] }
   | { type: 'host/agent-error'; sessionId: string; message: string }
   | { type: 'host/workspace-changed'; workspace: unknown }
   | { type: 'host/workspace-removed'; workspaceId: string }

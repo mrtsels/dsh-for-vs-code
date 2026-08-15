@@ -211,13 +211,19 @@ const main = async () => {
   console.log(`   unary 调用 ${out.unary.length} 条,ok=${out.unary.filter((u) => u.ok).length},预期404=${out.unary.filter((u) => u.http === 404).length},非404失败=${bad.length}`);
   for (const b of bad) console.log(`   ✗ ${b.method} ${b.err}`);
   console.log(`   mux 帧方法 ${new Set(muxFrames.map(frameKind)).size} 种 / host 帧方法 ${new Set(hostFrames.map(frameKind)).size} 种`);
-  // 每种帧方法附第一个完整样本(不截断),供 wire 类型实现参考
+  // 每种帧方法附第一个完整样本(不截断),供 wire 类型实现参考;原始帧不落盘(体积大,计数与形状已足够)
   const firstOf = (arr) => {
     const seen = new Set();
     const samples = [];
     for (const f of arr) { const k = frameKind(f); if (!seen.has(k)) { seen.add(k); samples.push({ kind: k, frame: f }); } }
     return samples;
   };
+  const countOf = (arr) => {
+    const m = new Map();
+    for (const f of arr) { const k = frameKind(f); m.set(k, (m.get(k) ?? 0) + 1); }
+    return Object.fromEntries(m);
+  };
+  out.frames = { mux: { count: muxFrames.length, methods: countOf(muxFrames) }, host: { count: hostFrames.length, methods: countOf(hostFrames) } };
   out.frameSamples = { mux: firstOf(muxFrames), host: firstOf(hostFrames) };
   const resultPath = resolve(import.meta.dirname, '../../../docs/probe-phase3-result.json');
   writeFileSync(resultPath, JSON.stringify(out, null, 2));

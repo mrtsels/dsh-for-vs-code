@@ -2,7 +2,6 @@
  * git.ts — 仓库状态 + 工作区 diff 摘要(P2-4)。
  * 优先 Git Extension API;不可用时降级 `git` CLI(只读命令,child_process 仅此用途)。
  */
-import * as vscode from 'vscode';
 import { execFile } from 'node:child_process';
 import { parseNumstat, parseStatusPorcelain } from '../agent/git-parse.js';
 
