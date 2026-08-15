@@ -17,8 +17,8 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const base = (process.argv[2] ?? 'http://127.0.0.1:3080').replace(/\/$/, '');
 const ARGS = process.argv.slice(2);
+const base = (ARGS.find((a) => !a.startsWith('--')) ?? 'http://127.0.0.1:3080').replace(/\/$/, '');
 const DO_WS = !ARGS.includes('--no-ws');
 const DO_GOAL = !ARGS.includes('--no-goal');
 const DO_PROMPT = !ARGS.includes('--no-prompt');
