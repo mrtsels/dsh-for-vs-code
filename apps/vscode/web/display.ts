@@ -88,17 +88,10 @@ export function eventsToDisplay(events: SessionEvent[]): DisplayItem[] {
         } else if (c.type === 'text-delta' && typeof c.text === 'string') {
           acc.text += c.text;
         } else if (c.type === 'block-end') {
-          // 块结束:流式项在此刷新一次
-          if (acc.text !== '' || acc.reasoning !== '') {
-            items.push({
-              kind: 'assistant-streaming',
-              turn: acc.turn,
-              step: acc.step,
-              text: acc.text,
-              reasoning: acc.reasoning,
-              time: event.time,
-            });
-          }
+          // 块结束:只切 mode 不 emit(真实 dsh 每 turn 有多个 block-end,
+          // 若在此 push 会把同一累积文本重复 emit);最终 flush 统一推一次。
+          // 渲染层每次事件到达都会重派生,中间进度天然可见。
+          if (acc.mode === 'reasoning') acc.mode = 'text';
         }
         break;
       }

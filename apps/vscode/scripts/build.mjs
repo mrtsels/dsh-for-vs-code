@@ -40,6 +40,20 @@ const webview = {
   logLevel: 'info',
 };
 
+/** @type {import('esbuild').BuildOptions} */
+const changes = {
+  entryPoints: [resolve(app, 'web/changes-main.tsx')],
+  outfile: resolve(app, 'dist/web/changes.js'),
+  bundle: true,
+  platform: 'browser',
+  format: 'iife',
+  target: 'es2022',
+  jsx: 'automatic',
+  sourcemap: true,
+  define: { 'process.env.NODE_ENV': '"production"' },
+  logLevel: 'info',
+};
+
 const htmlSkeleton = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -55,18 +69,21 @@ const htmlSkeleton = `<!DOCTYPE html>
 </html>
 `;
 
+const changesSkeleton = htmlSkeleton.replace('./index.js', './changes.js').replace('<title>DeepSeek Harness</title>', '<title>DeepSeek Harness — 改动审查</title>');
+
 async function main() {
   mkdirSync(resolve(app, 'dist/web'), { recursive: true });
   writeFileSync(resolve(app, 'dist/web/index.html'), htmlSkeleton);
+  writeFileSync(resolve(app, 'dist/web/changes.html'), changesSkeleton);
   if (watch) {
-    for (const options of [extension, webview]) {
+    for (const options of [extension, webview, changes]) {
       const ctx = await buildContext(options);
       await ctx.watch();
     }
     console.log('[watch] watching… (Ctrl+C 退出)');
   } else {
-    await Promise.all([build(extension), build(webview)]);
-    console.log('dist/extension.js + dist/web/index.js 构建完成');
+    await Promise.all([build(extension), build(webview), build(changes)]);
+    console.log('dist/extension.js + dist/web/index.js + dist/web/changes.js 构建完成');
   }
 }
 

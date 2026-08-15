@@ -54,4 +54,20 @@ describe('eventsToDisplay(黄金样本回放)', () => {
     ];
     expect(eventsToDisplay(events)).toEqual([]);
   });
+
+  it('P1-3 回归:真实 dsh 每 turn 两个 block-end + 最终 flush 只产出一个流式气泡', () => {
+    const events: SessionEvent[] = [
+      ev({ type: 'assistant/chunk', seq: 1, data: { turn: 1, step: 1, chunk: { type: 'block-start', index: 0, blockType: 'reasoning' } } }),
+      ev({ type: 'assistant/chunk', seq: 2, data: { turn: 1, step: 1, chunk: { type: 'reasoning-delta', index: 0, text: '想…' } } }),
+      ev({ type: 'assistant/chunk', seq: 3, data: { turn: 1, step: 1, chunk: { type: 'block-end', index: 0 } } }), // 第一个 block-end
+      ev({ type: 'assistant/chunk', seq: 4, data: { turn: 1, step: 1, chunk: { type: 'block-start', index: 1, blockType: 'text' } } }),
+      ev({ type: 'assistant/chunk', seq: 5, data: { turn: 1, step: 1, chunk: { type: 'text-delta', index: 1, text: '你好' } } }),
+      ev({ type: 'assistant/chunk', seq: 6, data: { turn: 1, step: 1, chunk: { type: 'block-end', index: 1 } } }), // 第二个 block-end
+      ev({ type: 'turn/end', seq: 7, data: { turn: 1 } }),
+    ];
+    const items = eventsToDisplay(events);
+    const streaming = items.filter((i) => i.kind === 'assistant-streaming');
+    expect(streaming).toHaveLength(1); // 不再 ×3
+    expect(streaming[0]).toMatchObject({ text: '你好', reasoning: '想…' });
+  });
 });

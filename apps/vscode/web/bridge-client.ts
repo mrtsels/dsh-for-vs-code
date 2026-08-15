@@ -21,10 +21,30 @@ export function post(request: WebviewRequest): void {
   // 非 webview 环境(浏览器直接打开调试):静默,不写 console
 }
 
+/** 扩展→webview 消息类型白名单(P2-4):与 bridge.ts 的 ExtensionMessage 保持对称 */
+const KNOWN_TYPES = new Set(['state', 'session:list', 'event', 'error', 'terminal:output', 'diagnostics', 'changes']);
+
+/** 关键负载的轻量结构校验(防坏帧污染 UI;渲染层本无 HTML 注入面,这里防形状错误) */
+function isValidMessage(data: unknown): data is ExtensionMessage {
+  if (typeof data !== 'object' || data === null) return false;
+  const msg = data as Record<string, unknown>;
+  if (typeof msg.type !== 'string' || !KNOWN_TYPES.has(msg.type)) return false;
+  switch (msg.type) {
+    case 'event':
+      return typeof msg.sessionId === 'string' && Array.isArray(msg.events);
+    case 'session:list':
+      return Array.isArray(msg.items);
+    case 'changes':
+      return Array.isArray(msg.items);
+    default:
+      return true;
+  }
+}
+
 export function onMessage(handler: (message: ExtensionMessage) => void): () => void {
   const listener = (event: MessageEvent<ExtensionMessage>): void => {
     const data = event.data;
-    if (typeof data === 'object' && data !== null && 'type' in data) handler(data);
+    if (isValidMessage(data)) handler(data);
   };
   window.addEventListener('message', listener);
   return () => window.removeEventListener('message', listener);

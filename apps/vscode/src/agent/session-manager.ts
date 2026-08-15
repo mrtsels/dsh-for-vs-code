@@ -27,6 +27,19 @@ export class SessionManager {
 
   /** 把 runtime 的 mux 帧喂进来(构造时:new HarnessRuntime({...});随后 runtime.onMuxFrame = (f) => sm.handleMuxFrame(f)) */
   handleMuxFrame(frame: MuxFrame): void {
+    // P1-4:协议边界窄化(WS 帧不可信):session/event 缺 sessionId/event/seq 直接丢弃,不外抛
+    if (frame.type === 'session/event') {
+      if (
+        typeof frame.sessionId !== 'string' ||
+        frame.event === null ||
+        typeof frame.event !== 'object' ||
+        typeof frame.event.seq !== 'number'
+      ) {
+        return;
+      }
+    } else if (frame.type === 'session/subscribed') {
+      if (typeof frame.sessionId !== 'string' || typeof frame.lastSeq !== 'number') return;
+    }
     switch (frame.type) {
       case 'session/event': {
         const state = this.ensure(frame.sessionId);

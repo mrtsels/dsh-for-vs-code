@@ -24,6 +24,11 @@ export class SnapshotWatcher {
   private readonly snapshots = new Map<string, string>();
   private readonly changes = new Map<string, SnapshotChange>();
   private readonly debounce = new Map<string, ReturnType<typeof setTimeout>>();
+  /**
+   * 写拦截钩子(预留接口,P2-7):未来协议能力接入后,可在这里决定是否记录/放行改动。
+   * 返回 false 表示该改动不应被记录(如用户自己编辑的文件)。
+   */
+  shouldRecord: ((path: string) => boolean) | undefined;
 
   constructor(
     private readonly roots: string[],
@@ -46,6 +51,7 @@ export class SnapshotWatcher {
   private onFileEvent(root: string, filename: string): void {
     const abs = resolve(root, filename);
     if (this.isIgnored(abs)) return;
+    if (this.shouldRecord && !this.shouldRecord(abs)) return;
     const key = abs;
     const old = this.snapshots.get(key);
     clearTimeout(this.debounce.get(key));
@@ -90,6 +96,15 @@ export class SnapshotWatcher {
     const full = new vscode.Range(0, 0, editor.lineCount, 0);
     edit.replace(editor.uri, full, change.before);
     await vscode.workspace.applyEdit(edit);
+  }
+
+  /** 接受改动:清除记录并把基线更新为当前内容 */
+  accept(path: string): void {
+    const change = this.changes.get(path);
+    if (!change) return;
+    this.changes.delete(path);
+    this.snapshots.set(path, change.after);
+    this.onChanges?.([...this.changes.values()]);
   }
 
   dispose(): void {

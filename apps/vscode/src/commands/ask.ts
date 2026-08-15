@@ -21,7 +21,7 @@ export function registerAsk(ctx: AppContext): vscode.Disposable {
     try {
       await ensureConnected(ctx);
       const sessionId = await ensureSession(ctx);
-      ctx.activeSessionId = sessionId;
+      ctx.activeSessionId.value = sessionId;
       await ctx.sessions.seedHistory(sessionId, 50);
       await ctx.controller.ask(sessionId, text);
     } catch (error) {

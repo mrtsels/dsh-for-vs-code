@@ -11,6 +11,7 @@ import {
   type HostDescription,
   type HostFrame,
   type MuxFrame,
+  type RpcId,
   type RpcResult,
 } from './wire.js';
 
@@ -39,9 +40,11 @@ const DEFAULTS = { backoffBaseMs: 500, backoffFactor: 2, backoffMaxMs: 10_000, s
 export class HarnessRuntime {
   private readonly opts: Omit<Required<HarnessRuntimeOptions>, 'onMuxFrame' | 'onHostFrame' | 'onStatus'>;
   /** 可赋值回调:解决 runtime 与 session-manager 的构造顺序依赖 */
-  onMuxFrame?: (frame: MuxFrame) => void;
-  onHostFrame?: (frame: HostFrame) => void;
+  onMuxFrame?: (frame: MuxFrame, rpcId?: RpcId) => void;
+  onHostFrame?: (frame: HostFrame, rpcId?: RpcId) => void;
   onStatus?: (status: RuntimeStatus) => void;
+  /** 多播订阅(P1-1 修复):单槽 onStatus 会被后赋值者覆盖,订阅者互不干扰 */
+  private readonly statusListeners = new Set<(status: RuntimeStatus) => void>();
   private mux?: WebSocket;
   private hostWs?: WebSocket;
   private generation = 0;
@@ -58,6 +61,14 @@ export class HarnessRuntime {
     this.onMuxFrame = onMuxFrame;
     this.onHostFrame = onHostFrame;
     this.onStatus = onStatus;
+  }
+
+  /** 多播订阅状态变化;返回 disposer(注册即 effect) */
+  subscribeStatus(listener: (status: RuntimeStatus) => void): () => void {
+    this.statusListeners.add(listener);
+    return () => {
+      this.statusListeners.delete(listener);
+    };
   }
 
   get currentState(): RuntimeState {
@@ -94,6 +105,18 @@ export class HarnessRuntime {
     return parseServerResponse<T>(await res.text()).result;
   }
 
+  /** 回应当前代 server-request(approval/question 等可应答帧),P2-5 */
+  async respond(rpcId: RpcId, value: unknown): Promise<RpcResult<unknown>> {
+    const envelope = { type: 'client-response', rpcId, result: { ok: true, value } };
+    const res = await fetch(`${this.opts.baseUrl}/api/respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(envelope),
+    });
+    const text = await res.text();
+    return parseServerResponse<unknown>(text).result;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -113,7 +136,9 @@ export class HarnessRuntime {
 
   private emitStatus(state: RuntimeState, attempt: number, error?: string): void {
     this.state = state;
-    this.onStatus?.({ state, attempt, error });
+    const status: RuntimeStatus = { state, attempt, error };
+    this.onStatus?.(status);
+    for (const listener of this.statusListeners) listener(status);
   }
 
   private async loop(): Promise<void> {
@@ -158,11 +183,22 @@ export class HarnessRuntime {
   }
 
   private openSockets(): Promise<[WebSocket, WebSocket]> {
+    const timeoutMs = this.opts.streamOpenTimeoutMs;
     const open = (url: string): Promise<WebSocket> =>
       new Promise((resolve, reject) => {
         const ws = new WebSocket(url);
-        ws.onopen = () => resolve(ws);
-        ws.onerror = () => reject(new Error(`ws open failed: ${url}`));
+        const timer = setTimeout(() => {
+          ws.close();
+          reject(new Error(`ws open timeout: ${url}`));
+        }, timeoutMs);
+        ws.onopen = () => {
+          clearTimeout(timer);
+          resolve(ws);
+        };
+        ws.onerror = () => {
+          clearTimeout(timer);
+          reject(new Error(`ws open failed: ${url}`));
+        };
       });
     const base = this.opts.baseUrl.replace(/^http/, 'ws');
     return Promise.all([
@@ -174,17 +210,17 @@ export class HarnessRuntime {
   private pump(ws: WebSocket, kind: 'mux' | 'host', gen: number): void {
     ws.onmessage = (event: MessageEvent<string>) => {
       if (this.disposed || gen !== this.generation) return;
-      let payload: Record<string, unknown>;
       try {
-        payload = parseServerRequestFrame(String(event.data)).payload as Record<string, unknown>;
+        const frame = parseServerRequestFrame(String(event.data));
+        const payload = frame.payload as Record<string, unknown>;
+        if (kind === 'mux') this.onMuxFrame?.(payload as MuxFrame, frame.rpcId);
+        else this.onHostFrame?.(payload as HostFrame, frame.rpcId);
       } catch {
+        // 吞掉:帧解码失败或消费方异常,一律按坏帧处理并通知上层(不击穿扩展宿主)
         const error = { code: 'bad-frame', message: 'undecodable ws frame', details: {} };
         if (kind === 'mux') this.onMuxFrame?.({ type: 'stream/error', error });
         else this.onHostFrame?.({ type: 'stream/error', error });
-        return;
       }
-      if (kind === 'mux') this.onMuxFrame?.(payload as MuxFrame);
-      else this.onHostFrame?.(payload as HostFrame);
     };
     // onclose/onerror 由 loop 的 generation 等待接管
   }

@@ -17,7 +17,12 @@ export function App(): React.JSX.Element {
   const [eventsBySession, setEventsBySession] = useState<Record<string, SessionEvent[]>>({});
   const [input, setInput] = useState('');
   const [banner, setBanner] = useState<string | undefined>();
+  const [termOpen, setTermOpen] = useState(false);
+  const [termInput, setTermInput] = useState('');
+  const [termOutput, setTermOutput] = useState<string[]>([]);
+  const [diagCount, setDiagCount] = useState<{ errors: number; warnings: number }>({ errors: 0, warnings: 0 });
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const pendingAsk = useRef(false); // P2-6:in-flight 防重(事件到达即解锁)
 
   useEffect(() => {
     const unsubscribe = onMessage((message: ExtensionMessage) => {
@@ -32,16 +37,24 @@ export function App(): React.JSX.Element {
         case 'event':
           setEventsBySession((prev) => {
             const existing = prev[message.sessionId] ?? [];
-            if (message.events.length === 1 && existing.length > 0) {
-              const last = existing[existing.length - 1];
-              const incoming = message.events[0];
-              if (last !== undefined && incoming !== undefined && last.seq === incoming.seq) return prev; // 去重:同 seq 不重复追加
-            }
-            return { ...prev, [message.sessionId]: [...existing, ...message.events] };
+            // P1-2:seq 单调去重 — seedHistory 全量 + 实时增量可能重复推送,跳过 seq <= 尾部者
+            const lastSeq = existing.length > 0 ? (existing[existing.length - 1]?.seq ?? -1) : -1;
+            const fresh = message.events.filter((e) => e.seq > lastSeq);
+            if (fresh.length === 0) return prev;
+            return { ...prev, [message.sessionId]: [...existing, ...fresh] };
           });
+          // 任何事件到达都解除 in-flight 锁(P2-6:防重复发送)
+          pendingAsk.current = false;
           break;
         case 'error':
           setBanner(message.message);
+          pendingAsk.current = false;
+          break;
+        case 'terminal:output':
+          setTermOutput((prev) => [...prev.slice(-2000), message.text]);
+          break;
+        case 'diagnostics':
+          setDiagCount({ errors: message.errors, warnings: message.warnings });
           break;
       }
     });
@@ -52,10 +65,12 @@ export function App(): React.JSX.Element {
   const running = connState === 'running';
 
   const send = useCallback(() => {
+    if (pendingAsk.current) return; // P2-6:上一问未落事件前禁止重发
     const text = input.trim();
     if (text === '') return;
     setBanner(undefined);
     setInput('');
+    pendingAsk.current = true;
     post({ type: 'ask', text });
   }, [input]);
 
@@ -72,9 +87,17 @@ export function App(): React.JSX.Element {
 
   const events = activeSessionId !== undefined ? (eventsBySession[activeSessionId] ?? []) : [];
 
+  const runTerminal = useCallback(() => {
+    const command = termInput.trim();
+    if (command === '') return;
+    setTermOutput((prev) => [...prev, `$ ${command}\n`]);
+    setTermInput('');
+    post({ type: 'terminal:run', command });
+  }, [termInput]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', fontFamily: 'system-ui, sans-serif' }}>
-      <StatusBar state={connState} host={host} />
+      <StatusBar state={connState} host={host} diagnostics={diagCount} />
       {banner && (
         <div style={{ padding: '4px 12px', background: 'var(--vscode-inputValidation-errorBackground)', color: 'var(--vscode-errorForeground)', fontSize: 12 }}>
           ⚠ {banner}
@@ -86,6 +109,31 @@ export function App(): React.JSX.Element {
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <ChatView events={events} />
+          {termOpen && (
+            <div style={{ borderTop: '1px solid var(--vscode-editorWidget-border, #555)', display: 'flex', flexDirection: 'column', maxHeight: '30%' }}>
+              <div style={{ display: 'flex', gap: 6, padding: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: 'var(--vscode-descriptionForeground)' }}>终端(输出可捕获)</span>
+                <input
+                  value={termInput}
+                  onChange={(e) => setTermInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      runTerminal();
+                    }
+                  }}
+                  placeholder="输入命令,如 pnpm test"
+                  style={{ flex: 1, fontFamily: 'monospace' }}
+                />
+                <button type="button" onClick={runTerminal} disabled={termInput.trim() === ''}>
+                  运行
+                </button>
+              </div>
+              <pre style={{ margin: 0, overflow: 'auto', fontSize: 11, padding: 6, background: 'var(--vscode-terminal-background, #1e1e1e)', color: 'var(--vscode-terminal-foreground, #ccc)' }}>
+                {termOutput.length === 0 ? '(无输出)' : termOutput.join('')}
+              </pre>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid var(--vscode-editorWidget-border, #555)' }}>
             <textarea
               ref={inputRef}
@@ -110,6 +158,9 @@ export function App(): React.JSX.Element {
                 发送
               </button>
             )}
+            <button type="button" onClick={() => setTermOpen((v) => !v)} style={{ opacity: 0.7 }}>
+              {termOpen ? '收起终端' : '终端'}
+            </button>
           </div>
         </div>
       </div>

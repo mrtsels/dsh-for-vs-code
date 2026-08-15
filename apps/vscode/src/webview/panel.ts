@@ -1,6 +1,6 @@
 /**
  * panel.ts — ChatPanel 生命周期:open/reveal/dispose、加载 dist/web/index.html(CSP nonce 注入)、
- * 消息桥接(onDidReceiveMessage → validateWebviewRequest → 回调)。全量 disposer 清理。
+ * 消息桥接(onDidReceiveMessage → validateWebviewRequest → onRequest)。全量 disposer 清理。
  */
 import * as vscode from 'vscode';
 import { readFileSync } from 'node:fs';
@@ -10,16 +10,19 @@ import { validateWebviewRequest, type ExtensionMessage, type WebviewRequest } fr
 
 export interface ChatPanelOptions {
   extensionUri: vscode.Uri;
-  onRequest: (request: WebviewRequest) => void;
 }
 
 export class ChatPanel {
   static readonly viewType = 'deepseekHarness.chat';
   private readonly disposables = new DisposableSet();
-  private panel?: vscode.WebviewPanel;
+  private panel: vscode.WebviewPanel | undefined;
   private readonly html: string;
+  private readonly options: ChatPanelOptions;
+  /** 请求回调:构造后由 extension 接线(解决构造顺序依赖) */
+  onRequest: (request: WebviewRequest) => void = () => {};
 
-  constructor(private readonly options: ChatPanelOptions) {
+  constructor(options: ChatPanelOptions) {
+    this.options = options;
     const indexPath = vscode.Uri.joinPath(options.extensionUri, 'dist', 'web', 'index.html');
     this.html = readFileSync(indexPath.fsPath, 'utf8');
   }
@@ -56,7 +59,7 @@ export class ChatPanel {
           void vscode.window.showWarningMessage(`DeepSeek Harness:${error instanceof Error ? error.message : '非法消息'}`);
           return;
         }
-        this.options.onRequest(request);
+        this.onRequest(request);
       }),
     );
   }

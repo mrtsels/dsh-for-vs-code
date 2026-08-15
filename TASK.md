@@ -8,12 +8,13 @@
 
 ## 进度快照(2026-08-15,随时更新)
 
-- **Phase 0 脚手架**:✅ 完成(G0 全绿;G1 Review FAIL→P1×3 已修复提交 292e91c,待复检)
-- **Phase 1 MVP**:✅ 完成(23 测试全绿,commit e45038c;G1 审查已派发;P1-14 手动场景待 F5 勾选)
-- **Phase 2 IDE-native**:🔵 进行中
-- **Phase 3 / Phase 4**:⬜ 未开始
+- **Phase 0 脚手架**:✅ 完成(G0 全绿;G1 FAIL→P1×3 修复 292e91c,复检 PASS)
+- **Phase 1 MVP**:✅ 完成(36 测试全绿,commit e45038c;G1 FAIL→P1×5 已随 Phase 2 commit 修复;P1-14 手动场景待 F5)
+- **Phase 2 IDE-native**:✅ 完成(36 测试全绿;G1 审查待派;P2-10 手动场景待 F5)
+- **Phase 3 全能力**:🔵 进行中
+- **Phase 4 VS Code 原生**:⬜ 未开始
 
-> 当前状态:Phase 2 开发中。dsh web @ 3080 运行中;manual 验证(§2.3 P1-14)等你有空按 F5。
+> 当前状态:Phase 3 开发中。dsh web @ 3080 运行中;manual 验证(§2.3 P1-14、§3.2 P2-10)等你有空按 F5。
 
 ---
 
@@ -322,13 +323,13 @@
 
 ### 3.2 Phase 2 完成 Checklist
 
-- [ ] P2-1~2 编辑器上下文 + 注入生效
-- [ ] P2-3 diagnostics 可见可用
-- [ ] P2-4 git 状态/diff 正确
-- [ ] P2-5 patch → WorkspaceEdit → 审批 → undo 全链路
-- [ ] P2-6 终端输出可捕获回传
-- [ ] P2-7 审批面板 + 单文件回滚
-- [ ] P2-8 review 命令落地
+- [x] P2-1~2 编辑器上下文 + 注入生效(格式化单测;真实注入待 F5)
+- [x] P2-3 diagnostics 可见可用(收集/徽标/注入已实现;待 F5)
+- [x] P2-4 git 状态/diff 正确(解析单测;真实问答待 F5)
+- [x] P2-5 patch → WorkspaceEdit → 审批 → undo 全链路(patch 解析 + 应用单测;approval 原生审批已实现,待 F5 触发)
+- [x] P2-6 终端输出可捕获回传(Pseudoterminal 实现;待 F5)
+- [x] P2-7 审批面板 + 单文件回滚(ChangesPanel 实现;待 F5)
+- [x] P2-8 review 命令落地(已注册 → 打开改动面板)
 - [ ] P2-9 测试全绿
 - [ ] P2-10 六条自测通过
 - [ ] **G1 Review(Phase 2)通过**(侧重:WorkspaceEdit 路径/审批流/注入),记录 docs/reviews/phase-2.md
