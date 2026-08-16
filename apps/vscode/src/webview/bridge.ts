@@ -24,7 +24,10 @@ export type WebviewRequest =
   | { type: 'meta:goals'; sessionId: string }
   | { type: 'goal:create'; sessionId: string; objective: string }
   | { type: 'goal:control'; sessionId: string; ref: { id: string; revision: number }; action: 'pause' | 'resume' | 'complete' | 'clear' }
-  | { type: 'subagent:interrupt'; parentSessionId: string; childSessionId: string };
+  | { type: 'subagent:interrupt'; parentSessionId: string; childSessionId: string }
+  // 内部调试通道:webview 内 error/unhandledrejection 转发(不入 validateWebviewRequest 白名单,
+  // 仅 ChatViewProvider 内部消费,不发给业务 handler)
+  | { type: 'debug'; kind: 'error' | 'rejection'; message: string };
 
 /** 连接/运行状态(与 AgentController 状态机对齐) */
 export type ConnectionState = 'idle' | 'running' | 'error' | 'disconnected';

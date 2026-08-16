@@ -8,7 +8,7 @@ import { HarnessRuntime } from './agent/runtime.js';
 import { SessionManager } from './agent/session-manager.js';
 import { AgentController } from './agent/controller.js';
 import { ChangesPanel, toChangeItems } from './webview/changes-panel.js';
-import { ChatViewProvider } from './webview/chat-view.js';
+import { ChatPanel } from './webview/chat-panel.js';
 import { SnapshotWatcher } from './vscode/workspace.js';
 import { runCommandInTerminal } from './vscode/terminal.js';
 import { collectEditorContext } from './vscode/editor.js';
@@ -52,16 +52,17 @@ export function activate(context: vscode.ExtensionContext): void {
       changesPanel.post({ type: 'changes', items: toChangeItems(changes) });
     },
   );
-  // 主 UI = 活动栏侧边栏视图(WebviewView,内嵌 dsh 原生 UI);ChatPanel(编辑器面板)不再使用
-  const chatView = new ChatViewProvider({
+  // 主 UI = 编辑器 WebviewPanel(宽面板容纳 dsh 完整布局,范式对齐社区实践);
+  // 活动栏 view 提供"打开"入口节点
+  const chatPanelHost = new ChatPanel({
     extensionUri: context.extensionUri,
     getBaseUrl: () =>
       vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
   });
   const chatPanel: ChatPanelHost = {
-    open: () => chatView.open(),
-    post: (message) => chatView.post(message),
-    reload: (url) => chatView.reload(url),
+    open: () => chatPanelHost.open(),
+    post: (message) => chatPanelHost.post(message),
+    reload: (url) => chatPanelHost.reload(url),
   };
 
   // ---- runtime / sessions / controller ----
@@ -369,7 +370,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // ---- 接线(可变 handler 解决面板/runtime 构造顺序) ----
-  chatView.onRequest = handleRequest;
+  chatPanelHost.onRequest = handleRequest;
   changesPanel.onRequest = handleRequest;
 
   // ---- 命令 ----
@@ -397,9 +398,17 @@ export function activate(context: vscode.ExtensionContext): void {
   for (const d of registerNativeCommands(app)) disposables.add(d);
   disposables.add(statusItem);
 
-  // 活动栏 view = WebviewViewProvider:点击图标直接在侧边栏渲染 dsh 原生 UI
-  // (codex/claude code 交互;不再用 TreeDataProvider 节点中转)
-  disposables.add(vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatView));
+  // 活动栏 view:tree 入口节点(点击打开 Chat 面板;面板为 WebviewPanel,见 chat-panel.ts)
+  disposables.add(
+    vscode.window.registerTreeDataProvider('deepseekHarness.chat', {
+      getChildren: () => [{ label: '打开 DeepSeek Harness 面板' }],
+      getTreeItem: (item) => ({
+        label: item.label,
+        iconPath: new vscode.ThemeIcon('comment-discussion'),
+        command: { command: 'deepseekHarness.open', title: '打开 Chat 面板' },
+      }),
+    }),
+  );
 
   // P3-10:连接切换命令(写入配置 + runtime.rebase)
   disposables.add(
