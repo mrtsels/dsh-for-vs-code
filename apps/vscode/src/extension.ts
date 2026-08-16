@@ -11,6 +11,7 @@ import { ChangesPanel, toChangeItems } from './webview/changes-panel.js';
 import { ChatPanel } from './webview/chat-panel.js';
 import { registerSettingsSync } from './settings-sync.js';
 import { SessionsTreeProvider } from './sessions/tree.js';
+import { postRpc } from './rpc.js';
 import { SnapshotWatcher } from './vscode/workspace.js';
 import { runCommandInTerminal } from './vscode/terminal.js';
 import { collectEditorContext } from './vscode/editor.js';
@@ -429,6 +430,25 @@ export function activate(context: vscode.ExtensionContext): void {
           `会话列表刷新失败:${error instanceof Error ? error.message : String(error)}`,
         );
       });
+    }),
+  );
+  // 新建会话:用 VS Code 当前工作区目录创建(session.create 支持 cwd),
+  // 实现"工作区自动关联";无工作区时回退实例默认 cwd
+  disposables.add(
+    vscode.commands.registerCommand('deepseekHarness.newSession', async () => {
+      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
+      try {
+        const body = await postRpc(current, 'session.create', { ...(cwd ? { cwd } : {}) });
+        const sessionId = (body?.result?.value as { sessionId?: string } | undefined)?.sessionId;
+        if (typeof sessionId !== 'string') throw new Error('session.create: 缺少 sessionId');
+        chatPanel.post({ type: 'dsh:switch-session', sessionId });
+        void sessionsTree.refresh().catch(() => undefined);
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `新建会话失败:${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }),
   );
   void sessionsTree.refresh().catch(() => undefined);

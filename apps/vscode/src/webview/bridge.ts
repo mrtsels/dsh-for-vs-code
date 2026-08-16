@@ -25,6 +25,8 @@ export type WebviewRequest =
   | { type: 'goal:create'; sessionId: string; objective: string }
   | { type: 'goal:control'; sessionId: string; ref: { id: string; revision: number }; action: 'pause' | 'resume' | 'complete' | 'clear' }
   | { type: 'subagent:interrupt'; parentSessionId: string; childSessionId: string }
+  // 会话切换已应用:boot 桥已写 localStorage,扩展应重新注入 webview.html 完成重载
+  | { type: 'switch-session:applied'; sessionId: string }
   // 内部调试通道:webview 内 error/unhandledrejection 转发(不入 validateWebviewRequest 白名单,
   // 仅 ChatViewProvider 内部消费,不发给业务 handler)
   | { type: 'debug'; kind: 'error' | 'rejection'; message: string };

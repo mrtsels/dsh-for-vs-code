@@ -138,14 +138,15 @@ const debugBridge = `
     + ' modulepreload=' + (document.querySelector('link[rel="modulepreload"]') !== null)
     + ' module-script=' + (document.querySelector('script[type="module"]') !== null));
   // 原生会话切换桥:扩展 postMessage {type:'dsh:switch-session', sessionId} →
-  // 写 dsh.sessions.current(localStorage,上游 runtime 的持久化 key)后 reload,
-  // runtime 启动时恢复该会话(与浏览器版"记住上次会话"同一机制)
+  // 写 dsh.sessions.current(localStorage,上游 runtime 的持久化 key)后回传
+  // switch-session:applied;扩展侧重新注入 webview.html 完成重载
+  // (location.reload 在 VS Code webview 中会丢掉注入的 html,不可用)
   window.addEventListener('message', (e) => {
     const d = e.data;
     if (!d || d.type !== 'dsh:switch-session' || typeof d.sessionId !== 'string') return;
     try {
       localStorage.setItem('dsh.sessions.current', JSON.stringify({ sessionId: d.sessionId }));
-      location.reload();
+      vs.postMessage({ type: 'switch-session:applied', sessionId: d.sessionId });
     } catch (err) { send('error', 'switch-session: ' + String(err)); }
   });
 })();`;

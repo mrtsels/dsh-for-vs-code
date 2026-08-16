@@ -103,6 +103,12 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
         console.log(`[dsh-webview:${request.kind}]`, request.message);
         return;
       }
+      // 会话切换已应用:boot 桥已写 localStorage dsh.sessions.current;
+      // 重新注入 html 完成重载(webview 内 location.reload 会丢掉注入的 html)
+      if (request.type === 'switch-session:applied') {
+        webview.html = this.buildHtml(webview);
+        return;
+      }
       void Promise.resolve(this.onRequest(request)).catch((error) => {
         this.post({ type: 'error', message: error instanceof Error ? error.message : String(error) });
       });
@@ -132,7 +138,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     <link rel="stylesheet" href="${toWebview(asUri('assets/vendor-CjyC-hUb.css'))}" />
     <link rel="stylesheet" href="${toWebview(asUri('assets/index-CSGf6Qzd.css'))}" />
   </head>
-  <body style="margin:0;padding:0;height:100vh;overflow:hidden">
+  <body style="margin:0;padding:0;height:100vh;overflow:hidden;background:var(--vscode-sideBar-background)">
     <div id="root" style="height:100vh"></div>
     <script nonce="${nonce}">${bootJs}</script>
     <script type="module" nonce="${nonce}" src="${toWebview(asUri('assets/index-Dqw48FrP.js'))}"></script>
