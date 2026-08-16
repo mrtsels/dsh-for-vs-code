@@ -99,10 +99,31 @@ for (const url of [...new Set(boot.entries.map((e) => e.url))]) {
 }
 
 // 5. boot.js(CSP 无 inline script,数据走独立文件;附加错误转发通道用于调试)
+// 裁剪:排除纯叶子 UI 插件(设置/计划/交付物/工作流/工作区选择等),
+// 由 VS Code 原生 UI 接管;会话区+输入面保留。
+const EXCLUDE_PLUGINS = new Set([
+  'dsh-client-ui-plan',
+  'dsh-client-ui-deliverables',
+  'dsh-client-ui-workflow-run',
+  'dsh-client-ui-agent-preset',
+  'dsh-client-ui-permission-presets',
+  'dsh-client-ui-settings-general',
+  'dsh-client-ui-settings-models',
+  'dsh-client-ui-settings-plugin-inventory',
+  'dsh-client-ui-settings-plugins',
+  'dsh-client-ui-directory-picker-native',
+  'dsh-client-ui-workspace',
+  // 会话列表栏:移出 webview,由 VS Code 原生 tree view 接管(用户确认的架构)
+  'dsh-client-ui-sidebar',
+  // 依赖 ui-sidebar 且非核心(cordis 管理界面)
+  'dsh-client-ui-cordis',
+]);
+const trimmed = boot.entries.filter((e) => !EXCLUDE_PLUGINS.has(e.id.replace('@deepseek-ai/', '')));
+console.log(`boot 裁剪: ${boot.entries.length} → ${trimmed.length} 个插件`);
 const localBoot = {
   ...boot,
   rev: 'local',
-  entries: boot.entries.map((e) => ({ ...e, url: `./plugins/${e.id}/client.js`, rev: 'local' })),
+  entries: trimmed.map((e) => ({ ...e, url: `./plugins/@deepseek-ai/${e.id.replace('@deepseek-ai/', '')}/client.js`, rev: 'local' })),
 };
 const debugBridge = `
 ;(() => {
