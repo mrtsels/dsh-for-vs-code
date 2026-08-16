@@ -9,6 +9,7 @@
  * CSP 无 remote origin。fetch-dsh-ui.mjs 从 3080 抓取产物(boot 图 + assets + 插件)。
  */
 import * as vscode from 'vscode';
+import { readFileSync } from 'node:fs';
 
 import type { WebviewRequest } from './bridge.js';
 import type { ExtensionMessage } from './bridge.js';
@@ -114,6 +115,11 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     const nonce = crypto.randomUUID().replace(/-/g, '');
     const csp = webview.cspSource;
     const toWebview = (uri: vscode.Uri): string => webview.asWebviewUri(uri).toString();
+    // boot 脚本内联(CSP nonce 允许),消除外部 script 加载的不确定;debugBridge 随之生效
+    const bootJs = readFileSync(
+      vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-plugins', 'boot.js').fsPath,
+      'utf8',
+    ).replace(/<\/script>/gi, '<\\/script>');
     return `<!doctype html>
 <html lang="zh-CN">
   <head>
@@ -124,8 +130,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
   </head>
   <body style="margin:0;padding:0;height:100vh;overflow:hidden">
     <div id="root" style="height:100vh"></div>
-    <script nonce="${nonce}" src="${toWebview(asUri('boot.js'))}"></script>
-    <link rel="modulepreload" nonce="${nonce}" href="${toWebview(asUri('assets/vendor-Cjbwl5VI.js'))}" />
+    <script nonce="${nonce}">${bootJs}</script>
     <script type="module" nonce="${nonce}" src="${toWebview(asUri('assets/index-Dqw48FrP.js'))}"></script>
   </body>
 </html>`;
