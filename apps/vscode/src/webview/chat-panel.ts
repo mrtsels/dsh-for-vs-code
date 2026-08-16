@@ -124,7 +124,11 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${csp} 'unsafe-inline'; script-src 'nonce-${nonce}' ${csp}; img-src ${csp} data: blob:; font-src ${csp} data:; connect-src http://127.0.0.1:3080 ws://127.0.0.1:3080; worker-src ${csp} blob:;" />
+    <!-- unsafe-eval:上游 vite 产物(client shell)含 eval/new Function,浏览器版 3080
+         无 CSP 故无此问题;webview CSP 必须放行。产物为本地受信文件 + connect 仅
+         127.0.0.1:3080,风险受控。 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${csp} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval' ${csp}; img-src ${csp} data: blob:; font-src ${csp} data:; connect-src http://127.0.0.1:3080 ws://127.0.0.1:3080; worker-src ${csp} blob:;" />
+    <base href="${toWebview(asUri('.'))}/" />
     <link rel="stylesheet" href="${toWebview(asUri('assets/vendor-CjyC-hUb.css'))}" />
     <link rel="stylesheet" href="${toWebview(asUri('assets/index-CSGf6Qzd.css'))}" />
   </head>

@@ -86,7 +86,9 @@ for (const url of [...new Set(boot.entries.map((e) => e.url))]) {
   const id = url.match(/plugins\/@deepseek-ai\/([^/]+)\/client\.js/)?.[1];
   if (!id) continue;
   try {
-    let body = await fetchTo(url, `plugins/${id}/client.js`);
+    // 注意:local 路径必须与 boot 图 url(./plugins/@deepseek-ai/<id>/client.js)一致,
+    // 否则插件 bundle 404,boot 永远等不到激活 → 白屏
+    let body = await fetchTo(url, `plugins/@deepseek-ai/${id}/client.js`);
     if (id === 'dsh-client-connection') {
       body = body
         .replace(/location\?\.origin !== void 0 && location\.origin !== "null" \? location\.origin : INTERNAL_BASE/g, '"http://127.0.0.1:3080"')
