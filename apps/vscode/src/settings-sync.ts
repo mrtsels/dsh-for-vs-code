@@ -1,0 +1,118 @@
+/**
+ * settings-sync.ts — VS Code 设置 ↔ dsh web(3080)设置双向同步。
+ *
+ * 原则:
+ * - 默认 follow-web:语言/主题跟随 dsh web UI 当前设置(读方向,不写回)
+ * - 用户选具体值(zh/en/light/dark/system):写回 dsh 实例 settings(locale/theme 命名空间),
+ *   上游 webview 插件监听 settings 事件自动生效
+ * - 只经 HTTP POST /api/settings.{describe,mutate},走既有 RPC 信封
+ */
+
+import * as vscode from 'vscode';
+
+/** dsh settings 命名空间内的偏好字段(与上游 locale/theme 插件约定一致) */
+const LOCALE_NS = 'locale';
+const THEME_NS = 'ui-theme';
+const PREFERENCE_FIELD = 'preference';
+
+/** VS Code 设置读到的可选值 */
+export type LocaleSetting = 'follow-web' | 'zh' | 'en';
+export type ThemeSetting = 'follow-web' | 'light' | 'dark' | 'system';
+
+interface RpcEnvelope {
+  type: 'client-request';
+  rpcId: string;
+  method: string;
+  payload: Record<string, unknown>;
+}
+
+/** 从 3080 读 settings.describe,返回当前生效的 locale/theme 偏好 */
+export async function readWebPreferences(baseUrl: string): Promise<{ locale?: string; theme?: string }> {
+  try {
+    const body = await postRpc(baseUrl, 'settings.describe', {});
+    const value = body?.result?.value as
+      | { namespaces?: Array<{ ns: string; value?: Record<string, unknown> }> }
+      | undefined;
+    const namespaces = value?.namespaces;
+    if (!Array.isArray(namespaces)) return {};
+    const pick = (ns: string) => namespaces.find((n) => n.ns === ns)?.value?.[PREFERENCE_FIELD];
+    return { locale: pick(LOCALE_NS) as string | undefined, theme: pick(THEME_NS) as string | undefined };
+  } catch {
+    // 实例不可达:保持 follow-web 语义(webview 端上游插件自行兜底)
+    return {};
+  }
+}
+
+/** 把 VS Code 设置写回 dsh 实例(仅具体值;follow-web 不写回) */
+export async function writeWebPreference(
+  baseUrl: string,
+  ns: 'locale' | 'ui-theme',
+  value: string,
+): Promise<boolean> {
+  try {
+    const body = await postRpc(baseUrl, 'settings.mutate', {
+      ns,
+      ops: [{ op: 'set', path: [PREFERENCE_FIELD], value }],
+    });
+    return body?.result?.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+/** settings 双向同步注册(theme + locale 独立监听,便于按项报告) */
+export function registerSettingsSync(baseUrl: () => string): vscode.Disposable[] {
+  const themeDisposable = vscode.workspace.onDidChangeConfiguration((e) => {
+    if (!e.affectsConfiguration('deepseekHarness.theme')) return;
+    const v = cfgTheme();
+    if (v === 'follow-web') return;
+    void writeWebPreference(baseUrl(), THEME_NS, v).then((ok) => {
+      if (!ok) void vscode.window.showWarningMessage(`dsh: 无法写回实例设置(theme=${v}),请确认实例在线`);
+    });
+  });
+  const localeDisposable = vscode.workspace.onDidChangeConfiguration((e) => {
+    if (!e.affectsConfiguration('deepseekHarness.locale')) return;
+    const v = cfgLocale();
+    if (v === 'follow-web') return;
+    void writeWebPreference(baseUrl(), LOCALE_NS, v).then((ok) => {
+      if (!ok) void vscode.window.showWarningMessage(`dsh: 无法写回实例设置(locale=${v}),请确认实例在线`);
+    });
+  });
+  return [themeDisposable, localeDisposable];
+}
+
+function cfgLocale(): LocaleSetting {
+  return vscode.workspace.getConfiguration('deepseekHarness').get<LocaleSetting>('locale', 'follow-web');
+}
+
+function cfgTheme(): ThemeSetting {
+  return vscode.workspace.getConfiguration('deepseekHarness').get<ThemeSetting>('theme', 'follow-web');
+}
+
+/** POST RPC 信封到 /api/<method>,返回解析后的 body;失败抛错由调用方兜底 */
+async function postRpc(
+  baseUrl: string,
+  method: string,
+  payload: Record<string, unknown>,
+): Promise<{ result?: { ok?: boolean; value?: unknown } }> {
+  const envelope: RpcEnvelope = {
+    type: 'client-request',
+    rpcId: `vscode-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    method,
+    payload,
+  };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(envelope),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as { result?: { ok?: boolean; value?: unknown } };
+  } finally {
+    clearTimeout(timer);
+  }
+}

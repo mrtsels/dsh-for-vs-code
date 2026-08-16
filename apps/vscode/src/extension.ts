@@ -9,6 +9,7 @@ import { SessionManager } from './agent/session-manager.js';
 import { AgentController } from './agent/controller.js';
 import { ChangesPanel, toChangeItems } from './webview/changes-panel.js';
 import { ChatPanel } from './webview/chat-panel.js';
+import { registerSettingsSync } from './settings-sync.js';
 import { SnapshotWatcher } from './vscode/workspace.js';
 import { runCommandInTerminal } from './vscode/terminal.js';
 import { collectEditorContext } from './vscode/editor.js';
@@ -59,6 +60,12 @@ export function activate(context: vscode.ExtensionContext): void {
     getBaseUrl: () =>
       vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
   });
+  // 设置同步:VS Code locale/theme(默认 follow-web)↔ dsh 实例设置
+  for (const d of registerSettingsSync(() =>
+    vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+  )) {
+    context.subscriptions.push(d);
+  }
   const chatPanel: ChatPanelHost = {
     open: () => chatPanelHost.open(),
     post: (message) => chatPanelHost.post(message),
