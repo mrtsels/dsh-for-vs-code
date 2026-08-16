@@ -1,12 +1,12 @@
 /**
- * chat-panel.ts — 主 UI:编辑器 WebviewPanel 装配 dsh 原生 UI(上游 shell 本地产物)。
+ * chat-panel.ts — 主 UI:装配 dsh 原生 UI(上游 shell 本地产物)。
  *
- * 工程范式对齐社区实践(Mingxi2077/dsh-vscode):主 UI 用 createWebviewPanel(宽面板,
- * 完整容纳 dsh 宽屏布局),活动栏为状态视图;UI 本身 = dsh 原生组件(不自研)。
+ * 双模式:
+ * - 活动栏侧边栏(WebviewView):点击图标直显原生 UI(主入口)
+ * - 编辑器面板(WebviewPanel):deepseekHarness.open 命令(可选)
  *
- * 装配:fetch-dsh-ui.mjs 从 3080 抓取上游 shell 产物(assets/vendor/css + 插件 client.js
- * + boot 图)到 dist/web/dsh-plugins/;本 panel 注入 boot.js + 加载 assets —— 与浏览器版
- * 同一套上游 React 组件与布局,资源全本地加载(CSP 无 remote origin)。
+ * UI = dsh 上游 React 组件(与浏览器版一致),资源全本地(dist/web/dsh-plugins),
+ * CSP 无 remote origin。fetch-dsh-ui.mjs 从 3080 抓取产物(boot 图 + assets + 插件)。
  */
 import * as vscode from 'vscode';
 
@@ -24,12 +24,13 @@ interface ChatPanelOptions {
   getBaseUrl: () => string;
 }
 
-export class ChatPanel implements ChatPanelHost {
-  static readonly viewType = 'deepseekHarness.chatPanel';
+export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
+  static readonly viewType = 'deepseekHarness.chat';
 
   private readonly extensionUri: vscode.Uri;
   private readonly getBaseUrl: () => string;
   private panel: vscode.WebviewPanel | undefined;
+  private view: vscode.WebviewView | undefined;
   /** 可变 handler(extension.ts 接线,解决构造顺序) */
   onRequest: (message: WebviewRequest) => Promise<unknown> = async () => undefined;
 
@@ -38,13 +39,32 @@ export class ChatPanel implements ChatPanelHost {
     this.getBaseUrl = options.getBaseUrl;
   }
 
+  /** WebviewViewProvider:活动栏点击 → 侧边栏直显原生 UI */
+  resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this.view = webviewView;
+    const { webview } = webviewView;
+    webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-plugins'),
+        vscode.Uri.joinPath(this.extensionUri, 'dist', 'web'),
+      ],
+    };
+    this.attach(webview);
+    // view 销毁后失效,防止 post 到已销毁 webview
+    webviewView.onDidDispose(() => {
+      if (this.view === webviewView) this.view = undefined;
+    });
+  }
+
+  /** 编辑器面板(可选入口) */
   async open(): Promise<void> {
     if (this.panel) {
       this.panel.reveal(vscode.ViewColumn.One);
       return;
     }
     const panel = vscode.window.createWebviewPanel(
-      ChatPanel.viewType,
+      `${ChatPanel.viewType}.panel`,
       'DeepSeek Harness',
       vscode.ViewColumn.One,
       {
@@ -60,8 +80,23 @@ export class ChatPanel implements ChatPanelHost {
     panel.onDidDispose(() => {
       this.panel = undefined;
     });
-    panel.webview.html = this.buildHtml(panel.webview);
-    panel.webview.onDidReceiveMessage((request: WebviewRequest) => {
+    this.attach(panel.webview);
+  }
+
+  /** 实例地址变化(切换 baseUrl)时重载 shell */
+  reload(_baseUrl: string): void {
+    const webview = this.view?.webview ?? this.panel?.webview;
+    if (webview) webview.html = this.buildHtml(webview);
+  }
+
+  post(message: ExtensionMessage): void {
+    void this.view?.webview.postMessage(message);
+    void this.panel?.webview.postMessage(message);
+  }
+
+  private attach(webview: vscode.Webview): void {
+    webview.html = this.buildHtml(webview);
+    webview.onDidReceiveMessage((request: WebviewRequest) => {
       // 调试通道:webview 内 error/unhandledrejection 转发
       if (request.type === 'debug') {
         console.log(`[dsh-webview:${request.kind}]`, request.message);
@@ -73,20 +108,10 @@ export class ChatPanel implements ChatPanelHost {
     });
   }
 
-  /** 实例地址变化(切换 baseUrl)时重载 shell */
-  reload(_baseUrl: string): void {
-    if (this.panel) this.panel.webview.html = this.buildHtml(this.panel.webview);
-  }
-
-  post(message: ExtensionMessage): void {
-    void this.panel?.webview.postMessage(message);
-  }
-
   private buildHtml(webview: vscode.Webview): string {
     const asUri = (rel: string): vscode.Uri =>
       vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-plugins', ...rel.split('/'));
     const nonce = crypto.randomUUID().replace(/-/g, '');
-    // webview 自身源(module import/css/img 均来自它);cspSource 随 webview 唯一
     const csp = webview.cspSource;
     const toWebview = (uri: vscode.Uri): string => webview.asWebviewUri(uri).toString();
     return `<!doctype html>

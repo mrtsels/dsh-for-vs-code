@@ -398,17 +398,8 @@ export function activate(context: vscode.ExtensionContext): void {
   for (const d of registerNativeCommands(app)) disposables.add(d);
   disposables.add(statusItem);
 
-  // 活动栏 view:tree 入口节点(点击打开 Chat 面板;面板为 WebviewPanel,见 chat-panel.ts)
-  disposables.add(
-    vscode.window.registerTreeDataProvider('deepseekHarness.chat', {
-      getChildren: () => [{ label: '打开 DeepSeek Harness 面板' }],
-      getTreeItem: (item) => ({
-        label: item.label,
-        iconPath: new vscode.ThemeIcon('comment-discussion'),
-        command: { command: 'deepseekHarness.open', title: '打开 Chat 面板' },
-      }),
-    }),
-  );
+  // 活动栏 view = WebviewViewProvider:点击图标直接在侧边栏渲染 dsh 原生 UI
+  disposables.add(vscode.window.registerWebviewViewProvider(ChatPanel.viewType, chatPanelHost));
 
   // P3-10:连接切换命令(写入配置 + runtime.rebase)
   disposables.add(

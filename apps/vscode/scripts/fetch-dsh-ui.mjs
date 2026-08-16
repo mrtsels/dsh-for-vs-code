@@ -107,11 +107,13 @@ const debugBridge = `
   const vs = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
   if (!vs) return;
   const send = (kind, msg) => vs.postMessage({ type: 'debug', kind, message: String(msg).slice(0, 500) });
-  window.addEventListener('error', (e) => send('error', e.message || e.error));
+  window.addEventListener('error', (e) => send('error', e.message || (e.target && e.target.src) || e.error), true);
   window.addEventListener('unhandledrejection', (e) => send('rejection', e.reason && (e.reason.stack || e.reason.message || e.reason)));
   // CSP 检测诊断:与 preload 的 querySelector 一致
   send('error', 'CSP-大写查询=' + (document.querySelector('meta[http-equiv="Content-Security-Policy"]') !== null)
-    + ' CSP-小写查询=' + (document.querySelector('meta[http-equiv="content-security-policy"]') !== null));
+    + ' CSP-小写查询=' + (document.querySelector('meta[http-equiv="content-security-policy"]') !== null)
+    + ' modulepreload=' + (document.querySelector('link[rel="modulepreload"]') !== null)
+    + ' module-script=' + (document.querySelector('script[type="module"]') !== null));
 })();`;
 await writeFile(join(dest, 'boot.js'), `window.__DSH_BOOT__ = ${JSON.stringify(localBoot)};\n${debugBridge}\n`);
 const assetCount = [...fetched.keys()].filter((u) => u.startsWith('/assets/')).length;
