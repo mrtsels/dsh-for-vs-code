@@ -38,6 +38,16 @@
         "title": "DeepSeek Harness: 切换实例地址"
       },
       {
+        "command": "deepseekHarness.switchSession",
+        "title": "DeepSeek Harness: 切换会话",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "deepseekHarness.refreshSessions",
+        "title": "DeepSeek Harness: 刷新会话列表",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "deepseekHarness.explainSelection",
         "title": "dsh: 解释选中代码"
       },
@@ -121,6 +131,25 @@
           "type": "webview",
           "id": "deepseekHarness.chat",
           "name": "Chat"
+        },
+        {
+          "id": "deepseekHarness.sessions",
+          "name": "Sessions"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "deepseekHarness.sessions",
+        "contents": "没有会话。启动 dsh web 实例(127.0.0.1:3080)后刷新。[刷新](command:deepseekHarness.refreshSessions)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "deepseekHarness.refreshSessions",
+          "when": "view == deepseekHarness.sessions",
+          "group": "navigation@1"
         }
       ]
     }

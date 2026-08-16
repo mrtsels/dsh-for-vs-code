@@ -10,6 +10,7 @@ import { AgentController } from './agent/controller.js';
 import { ChangesPanel, toChangeItems } from './webview/changes-panel.js';
 import { ChatPanel } from './webview/chat-panel.js';
 import { registerSettingsSync } from './settings-sync.js';
+import { SessionsTreeProvider } from './sessions/tree.js';
 import { SnapshotWatcher } from './vscode/workspace.js';
 import { runCommandInTerminal } from './vscode/terminal.js';
 import { collectEditorContext } from './vscode/editor.js';
@@ -407,6 +408,30 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // 活动栏 view = WebviewViewProvider:点击图标直接在侧边栏渲染 dsh 原生 UI
   disposables.add(vscode.window.registerWebviewViewProvider(ChatPanel.viewType, chatPanelHost));
+
+  // 会话列表:原生 tree(会话切换在 VS Code 原生层,webview 只渲染会话区)
+  const sessionsTree = new SessionsTreeProvider(() =>
+    vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+  );
+  disposables.add(vscode.window.createTreeView('deepseekHarness.sessions', { treeDataProvider: sessionsTree }));
+  disposables.add(sessionsTree.startAutoRefresh());
+  disposables.add(
+    vscode.commands.registerCommand('deepseekHarness.switchSession', (sessionId: unknown) => {
+      if (typeof sessionId !== 'string') return;
+      // 通知 webview 切换会话(boot 桥写 dsh.sessions.current + reload);扩展侧不缓存会话状态
+      chatPanel.post({ type: 'dsh:switch-session', sessionId });
+    }),
+  );
+  disposables.add(
+    vscode.commands.registerCommand('deepseekHarness.refreshSessions', () => {
+      void sessionsTree.refresh().catch((error) => {
+        void vscode.window.showErrorMessage(
+          `会话列表刷新失败:${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    }),
+  );
+  void sessionsTree.refresh().catch(() => undefined);
 
   // P3-10:连接切换命令(写入配置 + runtime.rebase)
   disposables.add(

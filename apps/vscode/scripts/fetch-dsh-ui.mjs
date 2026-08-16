@@ -137,6 +137,17 @@ const debugBridge = `
     + ' CSP-小写查询=' + (document.querySelector('meta[http-equiv="content-security-policy"]') !== null)
     + ' modulepreload=' + (document.querySelector('link[rel="modulepreload"]') !== null)
     + ' module-script=' + (document.querySelector('script[type="module"]') !== null));
+  // 原生会话切换桥:扩展 postMessage {type:'dsh:switch-session', sessionId} →
+  // 写 dsh.sessions.current(localStorage,上游 runtime 的持久化 key)后 reload,
+  // runtime 启动时恢复该会话(与浏览器版"记住上次会话"同一机制)
+  window.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || d.type !== 'dsh:switch-session' || typeof d.sessionId !== 'string') return;
+    try {
+      localStorage.setItem('dsh.sessions.current', JSON.stringify({ sessionId: d.sessionId }));
+      location.reload();
+    } catch (err) { send('error', 'switch-session: ' + String(err)); }
+  });
 })();`;
 await writeFile(join(dest, 'boot.js'), `window.__DSH_BOOT__ = ${JSON.stringify(localBoot)};\n${debugBridge}\n`);
 const assetCount = [...fetched.keys()].filter((u) => u.startsWith('/assets/')).length;

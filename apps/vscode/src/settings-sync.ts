@@ -9,6 +9,7 @@
  */
 
 import * as vscode from 'vscode';
+import { postRpc } from './rpc.js';
 
 /** dsh settings 命名空间内的偏好字段(与上游 locale/theme 插件约定一致) */
 const LOCALE_NS = 'locale';
@@ -18,13 +19,6 @@ const PREFERENCE_FIELD = 'preference';
 /** VS Code 设置读到的可选值 */
 export type LocaleSetting = 'follow-web' | 'zh' | 'en';
 export type ThemeSetting = 'follow-web' | 'light' | 'dark' | 'system';
-
-interface RpcEnvelope {
-  type: 'client-request';
-  rpcId: string;
-  method: string;
-  payload: Record<string, unknown>;
-}
 
 /** 从 3080 读 settings.describe,返回当前生效的 locale/theme 偏好 */
 export async function readWebPreferences(baseUrl: string): Promise<{ locale?: string; theme?: string }> {
@@ -87,32 +81,4 @@ function cfgLocale(): LocaleSetting {
 
 function cfgTheme(): ThemeSetting {
   return vscode.workspace.getConfiguration('deepseekHarness').get<ThemeSetting>('theme', 'follow-web');
-}
-
-/** POST RPC 信封到 /api/<method>,返回解析后的 body;失败抛错由调用方兜底 */
-async function postRpc(
-  baseUrl: string,
-  method: string,
-  payload: Record<string, unknown>,
-): Promise<{ result?: { ok?: boolean; value?: unknown } }> {
-  const envelope: RpcEnvelope = {
-    type: 'client-request',
-    rpcId: `vscode-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    method,
-    payload,
-  };
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/${method}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(envelope),
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return (await res.json()) as { result?: { ok?: boolean; value?: unknown } };
-  } finally {
-    clearTimeout(timer);
-  }
 }
