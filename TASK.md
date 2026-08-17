@@ -1,76 +1,122 @@
-# TASK.md — dsh-for-vs-code 实施任务书(2026-08-15 重写:UI 组件复用路线)
+# TASK.md — dsh-for-vs-code 实施任务书(2026-08-17 重写:Route A 源码构建路线)
 
-> 本版重写原因:**UI 路线更正**(2026-08-15):不再自研简化 webview UI,不再 iframe 内嵌 3080;
-> 改为 **vendor 上游 client 源码 + 定制装配**——直接复用 dsh 浏览器端的原生 React 组件
-> (packages/client/*),在扩展内用自定义 boot 图装配成 VS Code 侧边栏形态(对齐 claude code / codex 扩展做法)。
-> 既有协议层(runtime/wire/session-manager/controller)全部保留复用。
+> 本版重写原因(2026-08-17 用户决策):
+>
+> 1. **执行基准漂移**:08-15 版(Phase 5–8,vendor submodule + 定制 boot 图)方向正确,但此后实际走了
+>    "fetch dist + 注入 boot 桥"路线(fetch-dsh-ui.mjs),TASK.md 未同步、checkbox 全空;README(Phase 0–4)
+>    与 refactor-requirements(P0/P1/P2)又各是一套进度说法。
+> 2. **fetch+boot 被判定不靠谱**(用户决策,对比 references/deepseek-harness-vscode 112GT 路线后):
+>    产物对着活 3080 抓取、不可复现;debugBridge 以模板字符串注入上游 minified shell(转义坑已两次咬人,
+>    见 AGENTS.md Pitfalls);背景透明靠 getComputedStyle DOM 启发式;webview 直连撞 Origin 栅栏要靠
+>    扩展侧代理改写。**决策:改为 Route A —— 从锁定 rev 的 vendor 源码构建全部前端产物,自产
+>    index.html 与 __DSH_BOOT__ 图;唯一适配缝 = connection resolveBase 断言式替换。**
+> 3. 112GT 参考路线(vendored runtime + spawn sidecar + 自研 chat UI)违反本仓库红线
+>    (Route B 内嵌 runtime / X-5 API key 进扩展 / R-A2 自研 UI),不采纳其架构;仅借鉴工程骨架
+>    (AgentRunner 抽象、状态机 logTail、权限三档、编辑器改动装饰 —— 后者已实现)。
 
 ## 0. 目标与路线
 
 ### 0.1 目标
 
-VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080)的第二个客户端(映射同一 runtime,不另起实例)。
-**UI = dsh 原生 React 组件**(packages/client/ui-*),布局与浏览器版一致但做侧边栏定制适配。
+VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第二个 viewer:
+**UI = dsh 原生 React 组件(vendor 源码构建),布局与浏览器版一致 + 侧边栏定制适配**。
+不内嵌 runtime、不另起实例、API key/credentials 不进扩展。
 
-### 0.2 路线(与上游的关系)
+### 0.2 路线 A(源码构建;替代 fetch+boot)
 
-- **UI 复用 = git submodule + pnpm workspace**:上游 deepseek-harness 以 submodule 引入
-  (vendor/deepseek-harness,锁定 rev),扩展 webview 直接 import `@deepseek-ai/dsh-client-web`
-  等 client 包;上游包全部进 workspace 解析,构建时打包进 webview bundle。
-- **只读引用,不 fork 不改**:vendor 内不改任何上游源码;升级 = submodule update + 全量回归。
-- **定制装配 = 自定义 boot 图**:`AppWebEntry(el).run()` 读 `window.__DSH_BOOT__` 决定装配——
-  扩展构造自己的 boot 图:只装配侧边栏需要的插件子集(会话/聊天/工具/子代理/goals/jobs 等),
-  排除宽屏设置面;ui-layout 官方 narrow-viewport 折叠链自动适配侧边栏宽度。
-- **排除项(保持现状)**:changes 改动审查面板(扩展自研 WorkspaceEdit 回滚)继续用自研 webview;
-  协议层(runtime/wire/session-manager/controller)保留。
+- **vendor/deepseek-harness**(submodule,只读,锁 `47f94385` = 0.1.0-rc.5;上游 master 无 rc.6 源码 rev,
+  rc.6 仅 npm 产物,协议差异由 P5-5 冒烟把关)。
+- **vendor 内独立 workspace 构建**(嵌套 workspace 不入外层,见 pnpm-workspace.yaml 注释):
+  `corepack pnpm install --frozen-lockfile` → `pnpm run build:lib:client`(tsc + tsdown →
+  各 client 包 `lib/client.js`)+ `pnpm run build:web`(vite → `apps/web/dist` shell)。
+- **装配脚本 `apps/vscode/scripts/build-web-shell.mjs`**(替代 fetch-dsh-ui.mjs):
+  1. 拷贝 shell 产物(assets/ 等)→ `apps/vscode/dist/web/dsh-shell/`;
+  2. 拷贝各 client 包 `lib/client.js` → `dist/web/dsh-shell/plugins/<id>/client.js`
+     (id = 包全名,与上游 `/plugins/<id>/client.js` 路由同构);
+  3. 静态组图(镜像上游 ClientModuleRegistry 语义):扫描 client 包 `package.json` 的 `dsh.client`
+     (platform=web / immediately / inject)→ `__DSH_BOOT__ = {rev, entries:[{id, url:
+     "./plugins/<id>/client.js?rev=<hash>", rev, inject?, immediately?}]}`;与现存 rc.6 抓取图
+     (`dist/web/dsh-plugins/boot.js` 内 JSON)做集合核对;
+  4. 自产 `index.html`:注入 `__DSH_BOOT__`(首个 head script,`<` 转义,同上游 injectBootManifest)
+     + CSP(nonce)+ base href(产物根)+ `__DSH_WEB_URL__`(扩展侧代理地址);
+  5. **唯一适配缝**:connection `lib/client.js` 的 `resolveBase` 三元表达式确定性替换为
+     `globalThis.__DSH_WEB_URL__ ?? INTERNAL_BASE`;**断言式**——期望文本缺失即构建失败并提示
+     更新缝(替代原 regex 双模式替换)。
+- **运行时不变**:webview 经扩展侧 HTTP+WS 转发代理(`src/vscode/proxy.ts`,Origin 栅栏绕行,
+  d60c16f 结论);会话切换沿用 boot 桥 localStorage 契约(上游 attachPersistence 语义)。
+- **排除项(保持)**:changes 改动审查面板(自研)继续;协议层(runtime/wire/session-manager/
+  controller)保留。
 
-### 0.3 与既有红线的关系(AGENTS.md 同步修订)
+### 0.3 红线(与 AGENTS.md 一致,不因路线变更放松)
 
-- "不 fork 上游、不改 packages/core/agent-loop" ✅ 保持(submodule 只读)
-- "UI 只从 session/event 渲染" → 修订:UI 由上游组件 + 上游 connection 层驱动(上游自带事件模型,
-  扩展不做自维护 messages[])
-- "webview 安全:CSP 无 inline script;script-src 仅自身" ✅ 保持(client bundle 本地打包,不加载 remote script)
+- 不 fork 上游、不改 vendor 内任何源码、不改 packages/core/agent-loop;禁止 Route B(内嵌
+  runtime)/Route C(重写 loop)。
+- UI 由上游组件 + 上游 connection 层驱动;扩展不自维护 messages[];model-visible ⟺ logged。
+- webview 安全:CSP 无 inline script(注入脚本用 nonce,同现状);API key/credentials 不下发
+  webview、不进事件渲染。
+- 文件写走 WorkspaceEdit/快照回滚;terminal 走 VS Code Terminal API;src/agent/runtime.ts
+  只做传输(薄桥)。
+
+### 0.4 版本与协议
+
+- 运行时锁 dsh 0.1.0-rc.6(3080);UI 源码锁 rc.5(`47f94385`,记 docs/versions.md);
+  **升级只做专项 + 全量回归**。
+- 端点 `POST /api/<method>`(裸 `/api` 404);信封 `{type:"client-request", rpcId, method, payload}`
+  → `server-response`;WS 帧 `server-request`(host→client)。详见 docs/http-bridge.md。
 
 ## 1. 技术基线
 
-- 环境:node ^22.19 || >=24;本机 node v22.22.3 / pnpm 10.32.1 / dsh 0.1.0-rc.6 @ 3080
-- 上游:deepseek-ai/deepseek-harness(monorepo),client 端 = `packages/client/*` + `apps/web`
-- 协议:POST /api/<method> unary + WS /api/events.{mux,host}(文档见 docs/http-bridge.md)
-- 测试:G0 = pnpm typecheck / lint / test / build;集成测试标 @live
-- git:只 add 具体路径;commit 后立即 push;`feat|fix|chore|refactor:` 前缀
+- 环境:node v22.22.3 / pnpm 10.32.1(外层)/ corepack pnpm 11.7.0(vendor,随上游
+  packageManager 锁定)/ dsh 0.1.0-rc.6 @ 3080。
+- 测试:G0 = typecheck / lint / test / build 全绿;集成测试标 `@live`,无服务可跳过。
+- git:只 `git add <具体路径>`;commit 后立即 push;`feat|fix|chore|refactor|docs:` 前缀。
+- vendor 构建命令一律在 `vendor/deepseek-harness/` 内执行(corepack pnpm),产物不入外层
+  workspace;vendor 内不做任何 git 提交。
 
-## 2. 阶段计划(重排)
+## 2. 现状盘点(2026-08-17 实测)
 
-### Phase 5:vendor 引入与构建打通(UI 组件复用基座)
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| vendor submodule | ✅ | `47f94385`(0.1.0-rc.5)已初始化;rev 记入 docs/versions.md |
+| fetch+boot 产物 | ⚠️ 运行中 | `dist/web/dsh-plugins`(rc.6 抓取);Phase 5 完成后由 dsh-shell 替代,Phase 7 退役 fetch-dsh-ui.mjs |
+| Origin 栅栏 | ✅ 已解 | 扩展侧代理(d60c16f);代理本身保留 |
+| P0/P1/P2 整改 | ✅ | refactor-requirements.md 执行表;P0-2(Chat Participant)待用户 reload 验证 |
+| G0 | ✅ | typecheck 0 / lint 0 warning / 54 tests / build 3 入口(10:07 实测) |
+| vendor workspace 安装 | ✅ | 依赖已装(lefthook postinstall 失败为 submodule 限制,无关构建) |
 
-- [ ] P5-1 submodule 引入:vendor/deepseek-harness @ master(锁定 rev;git add .gitmodules + 提交)
-- [ ] P5-2 workspace 接入:pnpm-workspace.yaml 加入 vendor/deepseek-harness/packages/*
-      + apps/web;安装依赖(cordis/react/vite 全家桶)
-- [ ] P5-3 构建打通:build.mjs 新增 webview 入口——上游 vite 配置(复制 apps/web/vite.config.ts 模式)
-      产出 dist/web/dsh-shell.js(含 AppWebEntry + client 包 bundle)
-- [ ] P5-4 最小 boot:webview 加载 `new AppWebEntry(el).run()`,boot 图 = **全量插件**(与 3080 相同),
-      connection 指向 http://127.0.0.1:3080 → 验证完整浏览器 UI 在侧边栏 view 中渲染(等同 3080 布局)
-- [ ] P5-5 G0 四门 + 冒烟(活动栏 view 显示完整 UI)
-- [ ] P5-6 记录 docs/versions.md 上游 rev
+## 3. 阶段计划
+
+### Phase 5:vendor 构建打通(源码构建基座)
+
+- [x] P5-1 submodule 锁定:`vendor/deepseek-harness` @ `47f94385`(0.1.0-rc.5)→ docs/versions.md 记录
+- [x] P5-2 vendor workspace 安装:corepack pnpm 11.7.0 install --frozen-lockfile
+- [ ] P5-3 构建:vendor 内 `pnpm run build:lib:client` + `pnpm run build:web`;验证各 client 包
+      `lib/client.js` 与 `apps/web/dist` 产出
+- [ ] P5-4 装配脚本 `build-web-shell.mjs`:拷贝 + 静态组图(与 rc.6 抓取图核对)+ index.html
+      + resolveBase 断言式替换 → 产出 `dist/web/dsh-shell/`
+- [ ] P5-5 面板接线:chat-panel.ts 指向 dsh-shell;冒烟:侧边栏完整 UI(全量插件图,等同 3080)、
+      会话列表、工作区选择、聊天流式
+- [ ] P5-6 G0 四门 + 提交(脚本 + 接线 + 文档)
 
 ### Phase 6:定制适配(侧边栏形态)
 
-- [ ] P6-1 定制 boot 图:插件子集(ui-layout/sidebar/conversation/primitives/slots/theme/tool/
-      input-trigger/model-selection/jobs/subagent/goal/skill/user-questions/commands + runtime 链),
-      排除 ui-settings*/plan/deliverables/workflow-run/agent-preset/permission-presets
-- [ ] P6-2 侧边栏适配:验证 ui-layout narrow-viewport 折叠链;必要时注入侧边栏专用 CSS
-      (VS Code 主题变量对齐:背景/前景/强调色)
-- [ ] P6-3 主题对齐:webview body 背景 = --vscode-sideBar-background 等;iframe 移除(纯本地 bundle)
-- [ ] P6-4 扩展壳接线:ChatViewProvider 加载 dsh-shell;连接状态/切换 baseUrl 注入 boot 图
-- [ ] P6-5 G0 + 冒烟(侧边栏形态 UI,窄屏布局正常)
+- [ ] P6-1 定制 boot 图:插件子集(排除 ui-settings*/plan/deliverables/workflow-run/
+      agent-preset/permission-presets 等,对照 refactor-requirements R-A2 的 EXCLUDE 12)
+- [ ] P6-2 侧边栏适配:ui-layout narrow-viewport 折叠链验证;自有 CSS 替代
+      transparentPageChrome DOM 启发式(静态样式表,不做运行时 DOM 遍历)
+- [ ] P6-3 主题对齐:基础样式表用 VS Code 变量(背景透明等),静态 CSS
+- [ ] P6-4 扩展壳接线:连接状态/切换 baseUrl 注入 boot 图;__DSH_WEB_URL__ 保持
+- [ ] P6-5 G0 + 冒烟(窄屏布局正常)
 
 ### Phase 7:功能验证与清理
 
 - [ ] P7-1 全功能回归:会话新建/切换/fork、聊天流式、工具调用、审批、subagent 打断、
       goals、jobs、改动审查(自研面板仍工作)
-- [ ] P7-2 自研 UI 清理:web/App.tsx、ChatView、SessionList、InsightsTabs、StatusBar、
-      bridge-client、web/main.tsx 移除(dead code);bridge.ts 消息面按需保留(changes 面板)
-- [ ] P7-3 文档同步:AGENTS.md(UI 红线修订)、README(架构图更新)、docs/gaps.md
+- [ ] P7-2 自研 UI 清理:`web/*`(App.tsx、ChatView、SessionList、InsightsTabs、StatusBar、
+      bridge-client、main.tsx)移除;fetch-dsh-ui.mjs 退役(连同 AGENTS.md 对应坑条目);
+      bridge.ts 按需保留(changes 面板)
+- [ ] P7-3 文档同步:AGENTS.md(UI 红线修订)、README(架构图/当前状态)、docs/gaps.md、
+      docs/http-bridge.md(如有变化)
 - [ ] P7-4 G0 + 手动测试清单 docs/manual-tests/phase-5.md
 
 ### Phase 8:交付门
@@ -79,23 +125,25 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080)的第二个客户端(�
 - [ ] P8-2 G2 交付门(全量回归 + §7 Checkbox 更新)
 - [ ] P8-3 tag + 发布文档
 
-## 3. 阶段门与验收(沿用)
+## 4. 阶段门与验收(沿用)
 
-- G0 提交门:typecheck / lint / test / build 全绿;集成测试 @live 可跳过
-- G1 每阶段独立审查(独立 reviewer);P0/P1 未清即 FAIL
-- G2 交付门:全量 §6.4 类核查 + §7 Checkbox
-- Review 记录:docs/reviews/phase-<n>.md;进度快照更新于本文件顶部
+- G0 提交门:typecheck / lint / test / build 全绿;集成测试 @live 可跳过。
+- G1 每阶段独立审查(独立 reviewer);P0/P1 未清即 FAIL。
+- G2 交付门:全量 §6.4 类核查 + §7 Checkbox。
+- Review 记录:docs/reviews/phase-<n>.md;进度快照更新于本文件顶部。
 
-## 4. 风险登记(§8 更新)
+## 5. 风险登记(§8 更新)
 
 | # | 风险 | 影响 | 缓解 |
-|---|---|---|---|
-| R1 | vendor 上游后上游大版本漂移 | 构建/协议破坏 | 锁 rev;升级只做专项 + 全量回归 |
-| R2 | client 依赖闭包大(pnpm install 重) | 安装慢/冲突 | workspace 按需;pnpm 缓存 |
-| R3 | 上游窄窗口布局不满足侧边栏 | 布局错乱 | ui-layout 官方折叠链 + 定制 CSS;兜底:布局参数注入 |
-| R4 | 上游 boot 机制变更(AppWebEntry 签名) | 定制装配失效 | 锁 rev;升级专项 |
-| R5 | 自研协议层与上游 connection 层重复 | 双通道漂移 | 评估:优先上游 connection(本地 bundle 直连 3080);自研层仅保留 changes 面板用途 |
+| --- | --- | --- | --- |
+| R1 | rc.5 源码 UI ↔ rc.6 运行时协议漂移 | 部分帧/端点不识别、UI 异常 | P5-5 冒烟全链把关;差异记 docs/versions.md;上游 rc.6 源码出现后升级专项 |
+| R2 | vendor workspace 安装/构建重 | 耗时长 | 后台执行;必要时 `--filter` 按需构建 |
+| R3 | 上游 boot 机制变更(AppWebEntry/__DSH_BOOT__ 形状) | 装配失效 | 锁 rev;升级专项 + 全量回归 |
+| R4 | resolveBase 适配缝随上游漂移 | 连接失败 | 断言式替换(缺文本即构建失败);升级专项 |
+| R5 | 静态组图与上游图不一致(漏/多插件) | 功能缺失/重复 | P5-4 与现存 rc.6 抓取图集合核对 |
+| R6 | 产物体积/加载性能 | 侧边栏慢 | 复用上游 vendor chunk 策略;按需分包 |
 
-## 5. 执行
+## 6. 执行
 
 按 Phase 5→8 顺序;每完成一步在 TASK.md 打勾;卡住即调整并记录原因。
+README「当前状态」在 P7-3 同步。
