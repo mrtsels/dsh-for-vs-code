@@ -121,6 +121,10 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     const nonce = crypto.randomUUID().replace(/-/g, '');
     const csp = webview.cspSource;
     const toWebview = (uri: vscode.Uri): string => webview.asWebviewUri(uri).toString();
+    // base href 必须指向产物根目录(joinPath 带 '.' 会生成畸形 base → 相对 URL 全 404)
+    const baseHref = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-plugins'),
+    ) + '/';
     // boot 脚本内联(CSP nonce 允许),消除外部 script 加载的不确定;debugBridge 随之生效
     const bootJs = readFileSync(
       vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-plugins', 'boot.js').fsPath,
@@ -134,7 +138,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
          无 CSP 故无此问题;webview CSP 必须放行。产物为本地受信文件 + connect 仅
          127.0.0.1:3080,风险受控。 -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${csp} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval' ${csp}; img-src ${csp} data: blob:; font-src ${csp} data:; connect-src http://127.0.0.1:3080 ws://127.0.0.1:3080; worker-src ${csp} blob:;" />
-    <base href="${toWebview(asUri('.'))}/" />
+    <base href="${baseHref}" />
     <link rel="stylesheet" href="${toWebview(asUri('assets/vendor-CjyC-hUb.css'))}" />
     <link rel="stylesheet" href="${toWebview(asUri('assets/index-CSGf6Qzd.css'))}" />
   </head>
