@@ -96,7 +96,15 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
   dsh:bootstrap-session 同路径,无 setTimeout)。不再用任何 `dsh-workspaces` CSS/
   expandAllWorkspaces/chevron/workspace 行拦截(已删)。改 vendor rev 后若
   `#dsh-sessions-root` 注入或 session-view.js 拷贝失败,先看装配产物再更新脚本
-  (验证对象:dist/web/dsh-shell/index.html 的 </body> 前)
+  (验证对象:dist/web/dsh-shell/index.html 的 </body> 前);2026-08-20 P1+P2:数据改拉 session.list + workspace.list
+  并行(分组反向索引 / 未分组 / 已归档折叠默认收起 / 运行中状态点 + "进行中");归档/子代理/
+  非当前 blank 按上游 sessionVisible 语义隐藏;行结构/状态点/相对时间/文件夹/三角图标自上游
+  ui-workspace Rows.tsx + ui-primitives 移植(不依赖 CSS Modules);归档 RPC =
+  workspace.archiveSession(右键菜单未做) → 2026-08-20 晚:改做完成 —— 子代理仅 origin==='subagent' 嵌套父行(递归折叠,
+  默认展开;fork 子代维持顶层;父隐藏时提升未分组);行尾 ⋯ 菜单 = 重命名/分叉/归档
+  (session.rename / session.fork {sessionId} / workspace.archiveSession {sessionId};
+  会话级无 delete,自绘 menu+Modal);新建/切换会话时 bridge 同步写 dsh.ui.view=chat
+  (否则从会话页新建后重载仍回会话页)
 
 - **webview 内 acquireVsCodeApi 只能 acquire 一次**(2026-08-20 实测根因):VS Code 预加载
   脚本(webview pre/index.html)对第二次调用抛 'An instance of the VS Code API has already

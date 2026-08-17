@@ -48,6 +48,25 @@
 > 死。修复 = postToHost 改经 window.__dshBridge.postToHost(bridge 持有唯一 acquire);
 > 独立调试环境无 bridge 时才回退 window.parent.postMessage。已按 VS Code 预加载源码
 > (pre/index.html)验证 once-guard 行为。
+> 分组 + 状态 + 归档折叠(2026-08-20,P1+P2):按 GPT 方案移植 presentation 而非组件。
+> - 数据:session.list + workspace.list 并行拉取;workspace.list.sessionIds 反向索引分组,
+>   无归属进"未分组",archivedSessionIds 进"已归档"段(默认折叠 + 计数);
+>   归档/子代理(origin=subagent)/非当前 blank 会话按上游 sessionVisible 语义隐藏;
+> - 状态:session.list 项仅 running 可用(上游 pendingInteraction/completed/
+>   runningSubagentCount 是 live store 字段,RPC 无)→ 运行中行显示官方状态点 + "进行中";
+> - 视觉:行结构(状态点槽 + 标题 + 元信息)、段头(三角箭头 + 文件夹图标 + 标题 + 计数)、
+>   相对时间(刚刚/{n}分钟/{n}小时/{n}天/{n}个月/{n}年)、图标 SVG 均自上游
+>   ui-workspace Rows.tsx / ui-primitives 提取移植(不依赖 CSS Modules);
+> - 归档 RPC 确认为 workspace.archiveSession(右键菜单暂未做,后续迭代);
+> 三问题实现(2026-08-20,P0+P1):1) 新建会话不进入对话 —— 根因:bridge 的
+> bootstrap/switch-session 处理只写 dsh.sessions.current,不重置 dsh.ui.view=chat,从会话页
+> 新建后重载仍回会话页(行点击跳转在 React 页显式写 view 所以正常)。修复:bridge 监听里
+> 两个键一起写后再回传 switch-session:applied;会话页补扩展 error 消息横幅(ensureFolderSession
+> 失败不再静默)。2) 子代理嵌套 —— 仅 origin==='subagent' 按 parentSessionId 挂父行(递归、
+> 可折叠、默认展开);fork 子代维持顶层语义(不嵌套);父不可见时子代理提升到未分组。
+> 3) 行操作菜单(⋯)= 重命名(session.rename)/ 分叉(session.fork {sessionId})/ 归档
+> (workspace.archiveSession {sessionId});会话级无 delete(上游无此 RPC);自绘 menu +
+> 重命名 Modal(不依赖 vendor Menu/Modal),成功后重新拉取数据。
 
 > 本版重写原因(2026-08-17 用户决策):
 >

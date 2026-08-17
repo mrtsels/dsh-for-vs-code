@@ -171,7 +171,7 @@ const sessionsLayout = await page.evaluate(() => {
       return header !== null && header.querySelector('.dsh-session-back') !== null;
     })(),
     newBtnPresent: document.querySelector('.dsh-session-new') !== null,
-    rows: document.querySelectorAll('.dsh-session-item').length,
+    rows: document.querySelectorAll('.dsh-session-row').length,
     frameGrid: frameStyle === null ? '(无 frame)' : frameStyle.gridTemplateColumns,
     noHScroll: document.documentElement.scrollWidth <= window.innerWidth,
     storedView: localStorage.getItem('dsh.ui.view'),
@@ -199,7 +199,7 @@ if (sessionsLayout.rows > 0) {
         }
       };
       window.addEventListener('message', onMsg);
-      const row = document.querySelector('.dsh-session-item');
+      const row = document.querySelector('.dsh-session-row');
       row.click();
       setTimeout(() => {
         window.removeEventListener('message', onMsg);

@@ -311,27 +311,49 @@ body, body[data-ds-dark-theme] {
   font-size: 12px; line-height: 1; cursor: pointer; white-space: nowrap;
 }
 .dsh-session-new:hover { background: var(--dsh-host-button-hover); }
-.dsh-session-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px; }
-.dsh-session-section {
-  font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
-  color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg));
-  margin: 2px 0 8px;
+.dsh-session-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 8px 16px; }
+/* ---- workspace 分组 + 会话行(2026-08-20 P1/P2:分组/运行状态/归档折叠;
+        行结构与上游 ui-workspace Rows 对齐:状态点槽 + 标题 + 元信息) ---- */
+.dsh-session-sections { display: flex; flex-direction: column; gap: 2px; }
+.dsh-session-section { display: flex; flex-direction: column; }
+.dsh-session-section-head {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; box-sizing: border-box;
+  padding: 6px 8px; border: none; border-radius: 6px;
+  background: transparent; color: var(--dsw-alias-label-primary, var(--dsh-host-fg));
+  font: inherit; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer;
 }
-.dsh-session-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.dsh-session-item {
+.dsh-session-section-head:hover { background: var(--dsh-host-hover); }
+.dsh-session-section-arrow {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px;
+  color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg));
+  transition: transform 0.15s ease;
+}
+.dsh-session-section-arrow--open { transform: rotate(90deg); }
+.dsh-session-section-folder { flex: none; display: inline-flex; color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg)); }
+.dsh-session-section-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-session-section-count {
+  flex: none; font-weight: 400; font-size: 11px;
+  color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg));
+}
+.dsh-session-rows { display: flex; flex-direction: column; gap: 1px; padding-bottom: 4px; }
+.dsh-session-row {
   display: flex; align-items: center; gap: 8px;
   width: 100%; min-width: 0; box-sizing: border-box;
-  padding: 8px 10px; border: none; border-radius: 6px;
+  padding: 7px 8px 7px 30px; border: none; border-radius: 6px;
   background: transparent; color: var(--dsw-alias-label-primary, var(--dsh-host-fg));
   font: inherit; font-size: 13px; text-align: left; cursor: pointer;
 }
-.dsh-session-item:hover { background: var(--dsh-host-hover); }
-.dsh-session-item-current { background: var(--dsh-host-active); }
-.dsh-session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.dsh-session-running {
-  flex: none; width: 6px; height: 6px; border-radius: 50%; margin-left: auto;
-  background: var(--dsh-host-success, #73c991);
-}
+.dsh-session-row:hover { background: var(--dsh-host-hover); }
+.dsh-session-row--current { background: var(--dsh-host-active); }
+.dsh-session-row--muted { opacity: 0.55; }
+.dsh-session-dot-slot { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; }
+.dsh-session-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dsh-host-accent); }
+.dsh-session-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-session-meta { flex: none; display: inline-flex; align-items: center; gap: 8px; font-size: 11px; }
+.dsh-session-status { color: var(--dsh-host-accent); }
+.dsh-session-time { color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg)); }
 .dsh-session-state {
   padding: 24px 12px; text-align: center;
   color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg)); font-size: 13px;
@@ -341,6 +363,84 @@ body, body[data-ds-dark-theme] {
   margin-top: 8px; height: 26px; padding: 0 12px; border-radius: 6px;
   border: none; background: var(--dsh-host-button-bg); color: var(--dsh-host-button-fg);
   cursor: pointer;
+}
+
+/* ---- 子代理嵌套 + 行操作菜单 + 重命名对话框 + 错误横幅(2026-08-20 P1) ---- */
+.dsh-session-row-wrap { display: flex; flex-direction: column; }
+.dsh-session-row-line { display: flex; align-items: center; min-width: 0; }
+.dsh-session-child-toggle {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 26px; border: none; background: transparent; padding: 0;
+  color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg)); cursor: pointer; border-radius: 4px;
+}
+.dsh-session-child-toggle:hover { background: var(--dsh-host-hover); }
+.dsh-session-child-toggle--empty { cursor: default; visibility: hidden; }
+.dsh-session-child-arrow {
+  display: inline-flex; width: 14px; height: 14px; transition: transform 0.15s ease;
+}
+.dsh-session-child-arrow--open { transform: rotate(90deg); }
+.dsh-session-children { padding-left: 24px; display: flex; flex-direction: column; }
+.dsh-session-more {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; margin-right: 4px; border: none; border-radius: 4px;
+  background: transparent; color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg));
+  cursor: pointer; padding: 0;
+}
+.dsh-session-more:hover { background: var(--dsh-host-hover); color: var(--dsh-host-fg); }
+.dsh-menu-overlay {
+  position: fixed; inset: 0; z-index: 900; background: transparent;
+}
+.dsh-session-menu {
+  position: fixed; z-index: 901; min-width: 168px; padding: 4px;
+  background: var(--dsh-host-menu-bg, var(--dsh-host-bg));
+  border: 1px solid var(--dsh-host-border, color-mix(in srgb, var(--dsh-host-fg) 15%, transparent));
+  border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  display: flex; flex-direction: column;
+}
+.dsh-session-menu button {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 6px 10px; border: none; border-radius: 4px;
+  background: transparent; color: var(--dsh-host-menu-fg, var(--dsh-host-fg));
+  font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+}
+.dsh-session-menu button:hover { background: var(--dsh-host-hover); }
+.dsh-session-menu button svg { flex: none; color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg)); }
+.dsh-session-dialog-overlay {
+  position: fixed; inset: 0; z-index: 902;
+  background: color-mix(in srgb, var(--dsh-host-bg, #1e1e1e) 60%, transparent);
+  display: flex; align-items: center; justify-content: center;
+}
+.dsh-session-dialog {
+  width: 320px; max-width: calc(100vw - 32px); padding: 16px;
+  background: var(--dsh-host-menu-bg, var(--dsh-host-bg));
+  border: 1px solid var(--dsh-host-border, color-mix(in srgb, var(--dsh-host-fg) 15%, transparent));
+  border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.dsh-session-dialog-title { font-size: 13px; font-weight: 600; color: var(--dsh-host-fg); }
+.dsh-session-dialog input {
+  width: 100%; box-sizing: border-box; padding: 7px 9px;
+  background: var(--dsh-host-input-bg, var(--dsh-host-bg));
+  color: var(--dsh-host-input-fg, var(--dsh-host-fg));
+  border: 1px solid var(--dsh-host-border, color-mix(in srgb, var(--dsh-host-fg) 20%, transparent));
+  border-radius: 6px; font: inherit; font-size: 12px; outline: none;
+}
+.dsh-session-dialog input:focus { border-color: var(--dsh-host-focus, var(--dsh-host-link)); }
+.dsh-session-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dsh-session-dialog-actions button {
+  height: 26px; padding: 0 12px; border: none; border-radius: 6px;
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.dsh-session-dialog-cancel { background: var(--dsh-host-hover); color: var(--dsh-host-fg); }
+.dsh-session-dialog-ok {
+  background: var(--dsh-host-button-bg, var(--dsh-host-accent)); color: var(--dsh-host-button-fg, #fff);
+}
+.dsh-session-dialog-ok:disabled { opacity: 0.5; cursor: default; }
+.dsh-session-error-banner {
+  margin: 8px; padding: 8px 10px; border-radius: 6px;
+  background: color-mix(in srgb, var(--dsh-host-error) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dsh-host-error) 40%, transparent);
+  color: var(--dsh-host-error); font-size: 12px; word-break: break-word;
 }
 
 /* ---- 会话切换按钮:对话模式插入 session title 行内(与面包屑同行);
@@ -723,7 +823,12 @@ const BRIDGE_JS = `(() => {
     if (msg.type !== 'dsh:switch-session' && msg.type !== 'dsh:bootstrap-session') return;
     if (typeof msg.sessionId !== 'string') return;
     try {
+      // 2026-08-20(问题 1 根因):切会话/新建会话时必须把视图偏好重置为 chat ——
+      // 若停在 sessions 视图发起,重载后 bridge 读 dsh.ui.view 仍为 'sessions',
+      // 会重新进入会话管理页,观感 = "新会话没打开"。先写两个键再回传 applied,
+      // 保证 reload 时 boot 读到一致状态(会话行点击跳转在 React 页已显式写 view=chat)。
       localStorage.setItem(BOOT_SESSION_KEY, JSON.stringify({ sessionId: msg.sessionId }));
+      localStorage.setItem(VIEW_KEY, 'chat');
       postToHost({ type: 'switch-session:applied', sessionId: msg.sessionId });
     } catch (err) {
       console.error('[dsh-bridge] switch-session:', String(err));
