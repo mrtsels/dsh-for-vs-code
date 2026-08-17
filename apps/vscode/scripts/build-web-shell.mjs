@@ -270,35 +270,39 @@ body, body[data-ds-dark-theme] {
 body.dsh-workspaces { overflow: hidden !important; }
 body.dsh-workspaces #root { width: max(1100px, 100vw) !important; }
 body.dsh-workspaces [class$="_frame"] { grid-template-columns: minmax(0, 1fr) 0px 0px !important; }
+/* SidebarRoot 根元素上游内联 width(280px 拖拽偏好)会限制内容宽度 → 覆盖为 auto 撑满 */
+body.dsh-workspaces [class$="_sidebarCol"] > [class$="_root"] { width: auto !important; }
 body.dsh-workspaces [class$="_logoRow"] { padding-left: 40px !important; }
 body.dsh-workspaces [class$="_toggle"] { display: none !important; }
 
-/* ---- 返回按钮:body 直接子元素的固定悬浮按钮(React 重渲染不清除,点击恒有效);
-       对话模式位于左上角,title 行 padding 让位对齐;Workspaces 模式同位置返回 ---- */
+/* ---- 会话切换按钮:对话模式插入 session title 行内(与面包屑同行);
+       空会话 hero 与 Workspaces 页用 fixed 悬浮(左上角) ---- */
 .dsh-back-button {
-  position: fixed; top: 8px; left: 8px; z-index: 1000;
   display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: 6px;
+  flex: none; width: 26px; height: 26px; border-radius: 6px;
   border: none; background: transparent; color: var(--dsh-host-fg);
   cursor: pointer; padding: 0;
 }
 .dsh-back-button:hover { background: var(--dsh-host-hover); }
 .dsh-back-button svg { width: 15px; height: 15px; }
+.dsh-back-title { margin-right: 4px; }
+.dsh-back-floating,
+.dsh-back-workspaces { position: fixed; top: 8px; left: 8px; z-index: 1000; }
 .dsh-back-workspaces {
   background: var(--dsh-host-bg); border: 1px solid var(--dsh-host-border);
   box-shadow: 0 1px 4px color-mix(in srgb, #000 25%, transparent);
 }
 .dsh-back-workspaces:hover { background: var(--dsh-host-hover); }
-[class$="_titleRow"] { padding-left: 36px !important; }
 
 /* ---- hero 背景光斑:上游 SVG 硬编码 #6187D8(去掉底色后仍透蓝光);
        CSS fill 覆盖为宿主前景色(透明度保留) ---- */
 [class$="_heroGlow"] ellipse { fill: var(--dsh-host-fg) !important; }
 
 /* ---- "Deep diving..."(turn 状态行)上游硬编码品牌蓝渐变:
-       改为 VS Code 强调色渐变(保留 shimmer 动画与文字裁切) ---- */
+       改为 VS Code 强调色渐变。注意:只用 background-image(background 简写会重置
+       background-clip:text → 文字透明只剩色块),裁剪与 shimmer 动画保留 ---- */
 [class$="_turnStatus"] {
-  background: linear-gradient(
+  background-image: linear-gradient(
     90deg,
     var(--dsh-host-accent) 0%,
     var(--dsh-host-accent) 40%,
@@ -306,6 +310,8 @@ body.dsh-workspaces [class$="_toggle"] { display: none !important; }
     var(--dsh-host-accent) 60%,
     var(--dsh-host-accent) 100%
   ) !important;
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
 }
 `;
 
@@ -330,8 +336,8 @@ const BRIDGE_JS = `(() => {
   'use strict';
   const BOOT_SESSION_KEY = 'dsh.sessions.current';
   const VIEW_KEY = 'dsh.ui.view';
-  // 会话气泡 icon(用户要求:返回按钮不用箭头,用"会话"图标)
-  const SESSIONS_ICON = '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h9A1.5 1.5 0 0 1 14 2.5v6A1.5 1.5 0 0 1 12.5 10H8.2l-3.6 3.2A.6.6 0 0 1 3.6 12.7V10H3.5A1.5 1.5 0 0 1 2 8.5v-6z"/></svg>';
+  // 会话气泡 icon(用户要求:不用箭头;空心底,不实心)
+  const SESSIONS_ICON = '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M2 2.75A1.75 1.75 0 0 1 3.75 1h8.5A1.75 1.75 0 0 1 14 2.75v5.5A1.75 1.75 0 0 1 12.25 10H8.1l-3.5 3.1a.6.6 0 0 1-1-.46V10H3.75A1.75 1.75 0 0 1 2 8.25v-5.5Z"/></svg>';
 
   // 1. 首开会话(仅在无已存会话时写入)
   const bootSession = window.__DSH_BOOT_SESSION__;
@@ -372,62 +378,96 @@ const BRIDGE_JS = `(() => {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startThemeSync);
   else startThemeSync();
 
-  // 4. 布局:固定悬浮返回按钮(body 直接子元素 —— React 不管理 body 直接子节点,
-  // 应用重渲染不会移除按钮,点击永远有效;位置由 shell.css fixed 定位 +
-  // title 行 padding 让位对齐)。点击切换对话/Workspaces 视图。
-  const makeButton = () => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'dsh-back-button';
-    b.innerHTML = SESSIONS_ICON;
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setView(document.body.classList.contains('dsh-workspaces') ? 'chat' : 'workspaces');
-    });
-    return b;
-  };
-  let backButton = null;
+  // 4. 布局:会话切换按钮。用户要求:放在 session title 行左侧(插入 titleRow 首子元素,
+  // 与面包屑同行对齐);React 重渲染可能清除注入节点 → rAF 级重插 + document capture
+  // 事件委托(按钮被移除瞬间点击仍能命中)。空会话 hero 无 title 行 → fixed 悬浮兜底;
+  // Workspaces 页(全宽单栏)顶部 fixed 返回。
   const setView = (view) => {
     document.body.classList.toggle('dsh-workspaces', view === 'workspaces');
     try { localStorage.setItem(VIEW_KEY, view); } catch (err) {}
-    if (backButton === null || !backButton.isConnected) {
-      backButton = makeButton();
-      document.body.appendChild(backButton);
+    ensureBackButton();
+  };
+  const ensureBackButton = () => {
+    document.querySelectorAll('.dsh-back-button').forEach((n) => n.remove());
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'dsh-back-button';
+    btn.innerHTML = SESSIONS_ICON;
+    if (document.body.classList.contains('dsh-workspaces')) {
+      btn.classList.add('dsh-back-workspaces');
+      btn.title = '返回对话';
+      btn.setAttribute('aria-label', btn.title);
+      document.body.appendChild(btn);
+      return;
     }
-    const inWorkspaces = view === 'workspaces';
-    backButton.classList.toggle('dsh-back-workspaces', inWorkspaces);
-    backButton.title = inWorkspaces ? '返回对话' : 'Workspaces';
-    backButton.setAttribute('aria-label', backButton.title);
+    const titleRow = document.querySelector('[class$="_titleRow"]');
+    const header = titleRow === null ? null : titleRow.closest('[class$="_header"]');
+    const headerHidden = header !== null && header.getAttribute('aria-hidden') === 'true';
+    if (titleRow !== null && !headerHidden) {
+      btn.classList.add('dsh-back-title');
+      btn.title = 'Workspaces';
+      btn.setAttribute('aria-label', btn.title);
+      titleRow.insertBefore(btn, titleRow.firstChild);
+    } else {
+      // 空会话 hero:无 title 行,固定悬浮兜底
+      btn.classList.add('dsh-back-floating');
+      btn.title = 'Workspaces';
+      btn.setAttribute('aria-label', btn.title);
+      document.body.appendChild(btn);
+    }
   };
-  // 应用渲染后接管:轮询等 body 就绪 → 恢复视图偏好(按钮与类即刻就位)
-  const startLayout = () => {
-    let attempts = 0;
-    const timer = window.setInterval(() => {
-      attempts += 1;
-      if (document.body !== null && document.getElementById('root') !== null || attempts > 100) {
-        window.clearInterval(timer);
-        let view = 'chat';
-        try { view = localStorage.getItem(VIEW_KEY) === 'workspaces' ? 'workspaces' : 'chat'; } catch (err) {}
-        setView(view);
+  // React 重渲染清除 title 行内按钮 → rAF 重插(微任务窗口内点击不丢)
+  let reinsertPending = false;
+  const scheduleReinsert = () => {
+    if (reinsertPending) return;
+    reinsertPending = true;
+    requestAnimationFrame(() => {
+      reinsertPending = false;
+      if (!document.body.classList.contains('dsh-workspaces')) {
+        const titleRow = document.querySelector('[class$="_titleRow"]');
+        if (titleRow !== null && titleRow.querySelector('.dsh-back-title') === null) {
+          ensureBackButton();
+        }
       }
-    }, 150);
+    });
   };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startLayout);
-  else startLayout();
-
-  // 5. Workspaces 页:点击会话行/顶部新建按钮 → 自动返回对话
+  // 点击委托(document capture):workspaces 页点会话行/新建 → 返回对话;按钮 → 切换视图
   document.addEventListener('click', (event) => {
-    if (!document.body.classList.contains('dsh-workspaces')) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
+    if (target.closest('.dsh-back-button') !== null) {
+      event.stopPropagation();
+      setView(document.body.classList.contains('dsh-workspaces') ? 'chat' : 'workspaces');
+      return;
+    }
+    if (!document.body.classList.contains('dsh-workspaces')) return;
     const sessionRow = target.closest('[class$="_sessionRow"]');
     const newSession = target.closest('[class$="_newSession"]');
     if (sessionRow !== null || newSession !== null) {
       window.setTimeout(() => { setView('chat'); }, 150);
     }
   }, true);
+  // 应用渲染后接管:轮询等 root 就绪 → 恢复视图偏好 → 持续观察 title 行子节点变化
+  const startLayout = () => {
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      if ((document.body !== null && document.getElementById('root') !== null) || attempts > 100) {
+        window.clearInterval(timer);
+        let view = 'chat';
+        try { view = localStorage.getItem(VIEW_KEY) === 'workspaces' ? 'workspaces' : 'chat'; } catch (err) {}
+        setView(view);
+        if (typeof MutationObserver !== 'undefined') {
+          const observer = new MutationObserver(scheduleReinsert);
+          observer.observe(document.body, { childList: true, subtree: true });
+        }
+      }
+    }, 150);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startLayout);
+  else startLayout();
 
-  // 6. 会话切换桥(既有 + Phase 9 bootstrap:同一写入路径,不同消息名)
+  // 5. 会话切换桥(既有 + Phase 9 bootstrap:同一写入路径,不同消息名)
   window.addEventListener('message', (event) => {
     const msg = event.data;
     if (msg === null || typeof msg !== 'object') return;

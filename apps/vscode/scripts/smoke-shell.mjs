@@ -143,7 +143,10 @@ const chatLayout = await page.evaluate(() => {
     grid: frameStyle === null ? '(无 frame)' : frameStyle.gridTemplateColumns,
     frameWidth: frame === null ? -1 : frame.getBoundingClientRect().width,
     backButton: document.querySelector('.dsh-back-button') !== null,
-    backOnBody: document.body.querySelector(':scope > .dsh-back-button') !== null,
+    backInTitleRow: (() => {
+      const titleRow = document.querySelector('[class$="_titleRow"]');
+      return titleRow !== null && titleRow.querySelector('.dsh-back-title') !== null;
+    })(),
     host: document.body.dataset.dshHost ?? '(未设置)',
     darkAttr: document.body.hasAttribute('data-ds-dark-theme'),
     colorScheme: document.documentElement.style.colorScheme,
@@ -222,7 +225,7 @@ if (typeof chatLayout.grid !== 'string' || !chatLayout.grid.startsWith('0px') ||
   failures.push(`对话模式 frame 网格非 0|1fr|0:${chatLayout.grid}`);
 }
 if (!chatLayout.backButton) failures.push('对话模式缺少返回按钮');
-if (!chatLayout.backOnBody) failures.push('返回按钮不在 body 直接子节点(会被 React 重渲染清除)');
+if (!chatLayout.backInTitleRow) failures.push('返回按钮不在 session title 行内(用户要求放过去)');
 if (chatLayout.host !== 'sidebar') failures.push(`__DSH_HOST__ 未注入:${chatLayout.host}`);
 if (chatLayout.darkAttr !== true && chatLayout.colorScheme !== 'dark') {
   // 当前系统主题可能是浅色;只要 colorScheme 有值即视为已同步(与 matchMedia 一致即可)
