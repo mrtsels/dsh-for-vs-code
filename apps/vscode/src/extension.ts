@@ -400,8 +400,10 @@ export function activate(context: vscode.ExtensionContext): void {
   try {
     disposables.add(registerChatParticipant(app));
   } catch (error) {
-    // 降级:chat API/声明缺失时 ChatParticipant 不可用,不影响主 UI(runtime/视图照常)
-    logger.warn(`ChatParticipant 注册失败(降级):${error instanceof Error ? error.message : String(error)}`);
+    // 注册失败必须对用户可见(Chat 是核心入口),不静默降级
+    const message = `ChatParticipant 注册失败:${error instanceof Error ? error.message : String(error)}`;
+    logger.warn(message);
+    void vscode.window.showWarningMessage(`DeepSeek Harness:${message}`);
   }
   disposables.add(registerCodeActions(app));
   for (const d of registerNativeCommands(app)) disposables.add(d);
