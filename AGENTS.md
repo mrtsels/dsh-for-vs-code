@@ -41,6 +41,8 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
 - dev preview:上游 master(rc.5)与已装版本(rc.6)可能不一致,以 `dsh --version` 实测为准
 - 上游约定:注册即 effect;model-visible ⟺ logged;插件而非改 loop;misconfiguration 启动即报错,不静默跳过
 - `references/` 已 gitignore(本地才有设计草案),公开仓库见不到属正常;执行基准是 TASK.md
+- **fetch-dsh-ui.mjs 的 debugBridge 是 JS 模板字符串,内嵌正则必须写双反斜杠**:JS 模板转义规则 `\X`(非转义序列)会**丢弃**反斜杠(`\d`→`d`、`\(`→`(`),只有 `\\` 是转义序列→`\`。要得到正则 `\(\d+\)`,源码必须写 `\\(\\d+\\)`。**改完必须重跑 fetch,用 `node --check dist/web/dsh-plugins/boot.js` 验语法,再用 Python 字节级数反斜杠序列(勿用 repr 目测——每层转义都翻倍,极易误读)**;产物正则错误表现为 `((d+),s*` 或 `\\d`(匹配字面反斜杠),症状是 boot 桥静默失效(console 无探针/背景不透明)
+- **修改 fetch 脚本产物相关代码后,验证对象是产物(dist/web/dsh-plugins/boot.js)而非源码**;发现"代码在产物里但行为没生效"时,先怀疑模板转义把代码改形(反斜杠/引号层数),用 `node --check` + 字节级检查定位,不要反复改逻辑
 
 ## 执行
 
