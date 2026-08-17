@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 
 import type { WebviewRequest } from './bridge.js';
 import type { ExtensionMessage } from './bridge.js';
+import { Logger } from '../util/logger.js';
 
 export interface ChatPanelHost {
   open: () => Promise<void>;
@@ -33,6 +34,8 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
   private readonly extensionUri: vscode.Uri;
   private readonly getBaseUrl: () => string;
   private readonly getProxyBase: () => string;
+  /** webview 调试消息(错误横幅/CSP 探针)落输出通道,不弹 UI */
+  private readonly log = new Logger('dsh-webview');
   private panel: vscode.WebviewPanel | undefined;
   private view: vscode.WebviewView | undefined;
   /** 可变 handler(extension.ts 接线,解决构造顺序) */
@@ -104,7 +107,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     webview.onDidReceiveMessage((request: WebviewRequest) => {
       // 调试通道:webview 内 error/unhandledrejection 转发
       if (request.type === 'debug') {
-        console.log(`[dsh-webview:${request.kind}]`, request.message);
+        this.log.info(`[dsh-webview:${request.kind}] ${request.message}`);
         return;
       }
       // 会话切换已应用:boot 桥已写 localStorage dsh.sessions.current;

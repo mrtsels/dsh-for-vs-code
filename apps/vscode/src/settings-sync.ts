@@ -90,7 +90,6 @@ function cfgTheme(): ThemeSetting {
 // running 时禁止切换;danger 需 modal 确认,取消则回滚设置。
 
 const PERMISSION_NS = 'permission';
-const DEFAULT_PRESET_FIELD = 'defaultPreset';
 
 function cfgPermission(): PermissionSetting {
   return vscode.workspace

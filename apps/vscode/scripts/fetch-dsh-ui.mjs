@@ -66,7 +66,7 @@ for (const m of html.matchAll(/(?:src|href)="(\/(?:assets|plugins)\/[^"]+)"/g)) 
 
 // 3. 递归抓取 JS/CSS 的相对引用(vite chunk 树)
 while (queue.length > 0) {
-  const { url, local, body } = queue.shift();
+  const { url, body } = queue.shift();
   const refs = refsFrom(body ?? '');
   for (const ref of refs) {
     const childUrl = normalize(join(dirname(url), ref));
@@ -81,8 +81,7 @@ while (queue.length > 0) {
 }
 
 // 4. 插件 bundle(connection 本地适配)
-const pluginIds = new Set(boot.entries.map((e) => e.id));
-for (const url of [...new Set(boot.entries.map((e) => e.url))]) {
+for (const url of new Set(boot.entries.map((e) => e.url))) {
   const id = url.match(/plugins\/@deepseek-ai\/([^/]+)\/client\.js/)?.[1];
   if (!id) continue;
   try {
@@ -206,18 +205,81 @@ const debugBridge = `
     try {
       localStorage.setItem('dsh.sessions.current', JSON.stringify({ sessionId: d.sessionId }));
       vs.postMessage({ type: 'switch-session:applied', sessionId: d.sessionId });
-    } catch (err) { send('error', 'switch-session: ' + String(err)); }
+      } catch { /* ignore walk errors */ }
   });
-  // 背景融合 VS Code 原生底色:上游 ui-theme 可能延迟覆盖 body/html 背景,
-  // 这里在 DOMContentLoaded 后与 1s 后各强制一次 transparent
+  // 背景融合 VS Code 原生底色:上游 ui-theme 给页面框架层(frame/sidebar 列/
+  // main 根)铺主题表面色(白/浅灰,深色主题为近黑),在 VS Code 侧边栏里形成
+  // 一大块不协调色块。这里透明"页面框架层"——启发式:背景为纯主题表面色
+  // (RGB 通道全 >235 或全 <32)且占视口大块(宽≥20%/高≥45%)的容器;
+  // 内容卡片/输入框(面积小或非表面色)保留自身背景。结构判断,不依赖
+  // hash 类名(上游 CSS modules 前缀随版本变化)。
   const enforceTransparentBg = () => {
     document.documentElement.style.background = 'transparent';
     document.body.style.background = 'transparent';
   };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enforceTransparentBg);
-  else enforceTransparentBg();
-  setTimeout(enforceTransparentBg, 1000);
+  // CSS 级兜底:上游 body 背景来自主题变量 CSS 规则(非 inline),inline 设置
+  // 会被上游清空;注入 !important 规则保证 body/html 永远透出 VS Code 底色
+  const bgStyle = document.createElement('style');
+  bgStyle.textContent = 'html, body { background: transparent !important; }';
+  document.head.appendChild(bgStyle);
+  const transparentPageChrome = () => {
+    const root = document.getElementById('root');
+    if (!root) return;
+    const vw = document.documentElement.clientWidth || 1;
+    const vh = document.documentElement.clientHeight || 1;
+    const isSurface = (bg) => {
+      const m = /rgba?\\(\\d+\\),\\s*(\\d+),\\s*(\\d+)/.exec(bg || '');
+      if (!m) return false;
+      const r = +m[1], g = +m[2], b = +m[3];
+      return (r > 235 && g > 235 && b > 235) || (r < 32 && g < 32 && b < 32);
+    };
+    const walk = (el, depth) => {
+      if (depth > 7) return;
+      try {
+        // 布局锚点:root > DIV > frame(全页容器)——frame 及其直接子(布局列)
+        // 无条件透明;更深的容器按"主题表面色 + 大块面积"启发式(内容卡片保留)
+        const isLayoutChrome = depth === 2 || depth === 3;
+        const bg = getComputedStyle(el).backgroundColor;
+        if (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+          const rect = el.getBoundingClientRect();
+          if (isLayoutChrome || (isSurface(bg) && rect.width >= vw * 0.2 && rect.height >= vh * 0.45)) {
+            el.style.backgroundColor = 'transparent';
+          }
+        }
+      } catch { /* ignore walk errors */ }
+      for (const c of el.children) walk(c, depth + 1);
+    };
+    walk(root, 0);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => {
+    enforceTransparentBg();
+    transparentPageChrome();
+  });
+  else { enforceTransparentBg(); transparentPageChrome(); }
+  // 上游渲染/主题切换是异步的:DOM 变化监听 + 1s 轮询双保险
+  // (实测 MutationObserver 会漏掉晚渲染的容器,轮询兜底 30s)
+  const mo = new MutationObserver(() => {
+    enforceTransparentBg();
+    transparentPageChrome();
+  });
+  const watchChrome = () => {
+    const root = document.getElementById('root');
+    mo.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+    mo.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchChrome);
+  else watchChrome();
+  let bgTicks = 0;
+  const bgTick = () => {
+    try {
+      enforceTransparentBg();
+      transparentPageChrome();
+    } catch (err) { console.log('[dsh-bg-error]', String(err && err.stack || err)); }
+    if (++bgTicks < 30) setTimeout(bgTick, 1000);
+  };
+  setTimeout(bgTick, 500);
 })();`;
 await writeFile(join(dest, 'boot.js'), `window.__DSH_BOOT__ = ${JSON.stringify(localBoot)};\n${debugBridge}\n`);
 const assetCount = [...fetched.keys()].filter((u) => u.startsWith('/assets/')).length;
-console.log(`✅ 完成 → ${dest}: assets=${assetCount} 文件, plugins=${pluginIds.size} 个`);
+console.log(`✅ 完成 → ${dest}: assets=${assetCount} 文件, plugins=${localBoot.entries.length} 个`);
