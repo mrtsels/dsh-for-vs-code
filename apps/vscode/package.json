@@ -49,19 +49,13 @@
         "title": "DeepSeek Harness: 查看/选择模型"
       },
       {
-        "command": "deepseekHarness.switchSession",
-        "title": "DeepSeek Harness: 切换会话",
-        "icon": "$(arrow-swap)"
-      },
-      {
-        "command": "deepseekHarness.refreshSessions",
-        "title": "DeepSeek Harness: 刷新会话列表",
-        "icon": "$(refresh)"
-      },
-      {
         "command": "deepseekHarness.newSession",
         "title": "DeepSeek Harness: 新建会话(当前工作区)",
         "icon": "$(add)"
+      },
+      {
+        "command": "deepseekHarness.selectAgentPreset",
+        "title": "DeepSeek Harness: 选择 Agent Preset"
       },
       {
         "command": "deepseekHarness.explainSelection",
@@ -77,16 +71,6 @@
       }
     ],
     "menus": {
-      "commandPalette": [
-        {
-          "command": "deepseekHarness.switchSession",
-          "when": "false"
-        },
-        {
-          "command": "deepseekHarness.refreshSessions",
-          "when": "false"
-        }
-      ],
       "editor/context": [
         {
           "command": "deepseekHarness.explainSelection",
@@ -140,7 +124,22 @@
             "工作区写:允许修改工作区内文件",
             "全访问:允许访问工作区外文件且无逐项审批(需确认)"
           ],
-          "description": "工具权限模式。写回 dsh 实例 permission 设置;danger-full-access 需确认,运行中不可切换"
+          "description": "工具权限模式(新会话默认)。写回 dsh 实例 permission.defaultPreset;danger-full-access 需确认,运行中不可切换"
+        },
+        "deepseekHarness.agentPreset": {
+          "type": "string",
+          "default": "",
+          "description": "新建会话的 agent preset 默认(写回 dsh 实例 agent-presets.default)。留空 = 跟随实例当前默认;可用 preset 见实例名册(standard / code / minimal / cordis,可含自定义)。也可用命令 “DeepSeek Harness: 选择 Agent Preset” 从名册选择"
+        },
+        "deepseekHarness.busyEnter": {
+          "type": "string",
+          "enum": ["queue", "steer"],
+          "default": "queue",
+          "enumDescriptions": [
+            "忙碌时回车排队(默认)",
+            "忙碌时回车转向(打断当前输入,steer)"
+          ],
+          "description": "agent 忙碌时按 Enter 的行为。写回 dsh 实例 ui-conversation.busyEnter"
         }
       }
     },
@@ -174,30 +173,6 @@
           "type": "webview",
           "id": "deepseekHarness.chat",
           "name": "Chat"
-        },
-        {
-          "id": "deepseekHarness.sessions",
-          "name": "Sessions"
-        }
-      ]
-    },
-    "viewsWelcome": [
-      {
-        "view": "deepseekHarness.sessions",
-        "contents": "没有会话。启动 dsh web 实例(127.0.0.1:3080)后刷新。[刷新](command:deepseekHarness.refreshSessions)"
-      }
-    ],
-    "menus": {
-      "view/title": [
-        {
-          "command": "deepseekHarness.newSession",
-          "when": "view == deepseekHarness.sessions",
-          "group": "navigation@1"
-        },
-        {
-          "command": "deepseekHarness.refreshSessions",
-          "when": "view == deepseekHarness.sessions",
-          "group": "navigation@2"
         }
       ]
     }
