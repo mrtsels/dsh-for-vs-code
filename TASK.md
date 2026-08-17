@@ -4,8 +4,11 @@
 > **Phase 9(UI/UX 定制)**:P9-1 ✅(仅对话面板 + Workspaces 页;返回按钮改 body 固定悬浮,
 > React 重渲染不清除)、P9-2 ✅(仅 Chat 视图)、P9-3 ✅(--dsw-* 全量映射 VS Code 变量 +
 > heroGlow 蓝色 SVG 覆盖)、P9-4 ✅(bootstrap 模块 + __DSH_BOOT_SESSION__)、
-> P9-5 ✅(设置桥:agentPreset/busyEnter 新增,permission 修正 defaultPreset,双向轮询)、
-> P9-6 ✅(G0 四门 + @live 57/57 + smoke PASS + vision 验证三视图)。
+> P9-5 ✅(设置桥:agentPreset/busyEnter 新增,permission 修正 defaultPreset,双向轮询 +
+> 语言生效重载)、P9-6 ✅(G0 四门 + @live 57/57 + smoke PASS + vision 验证三视图)。
+> 用户反馈迭代(2026-08-18):Workspaces 页改**全宽单栏独立页面**(非 sidebar 形态)、
+> logo(wordmark)保留、返回按钮换"会话"气泡 icon、Deep diving 状态行改强调色、
+> 语言映射生效(写回后重载 webview)。
 > 待用户:扩展宿主窗口视觉确认(双击 启动扩展.command)。
 
 > 本版重写原因(2026-08-17 用户决策):

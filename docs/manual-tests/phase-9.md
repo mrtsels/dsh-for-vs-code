@@ -19,6 +19,13 @@
 - [ ] 空会话(hero:"Choose a workspace")状态下返回按钮仍可用
 - [ ] 重启扩展后停留在上次视图(chat/workspaces 记忆)
 
+## 2b. 视觉细节(用户反馈迭代)
+
+- [ ] "Deep diving..."(agent 忙碌状态行)为 VS Code 强调色(链接色),非品牌蓝
+- [ ] 左上角返回按钮为"会话"气泡图标
+- [ ] Workspaces 页为占满宽度的单栏列表(非窄条 sidebar),顶部保留 DeepSeek Harness logo
+- [ ] Workspaces 页点会话标题 → 进入对应会话页(自动返回对话)
+
 ## 3. 主题同步
 
 - [ ] 切换 VS Code 主题(如深色 ↔ 浅色),webview 配色跟随(背景/文字/卡片/边框)
@@ -38,7 +45,7 @@
       (也可用命令 "DeepSeek Harness: 选择 Agent Preset" 从名册选)
 - [ ] permissionMode 改 read-only/workspace-write(运行中应被拒并提示;danger 需确认)
       → 新建会话权限生效(输入栏权限 chip 显示)
-- [ ] locale 改 zh/en → webview 界面语言立即切换
+- [ ] locale 改 zh/en → webview 界面语言切换(webview 会重载一次生效;boot 后界面语言跟随)
 - [ ] theme 改 light/dark/system → 写回实例 ui-theme.preference(浏览器 3080 设置页可见)
 - [ ] busyEnter 改 steer/queue → 忙碌时回车行为变化(上游 ui-conversation.busyEnter)
 - [ ] 反向同步:在浏览器 3080 设置页改以上任一项 → 回到 VS Code 数秒内 VS Code 设置自动更新

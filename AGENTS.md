@@ -55,8 +55,9 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
 - `/plugins/events`(HMR dev SSE)在无 dev server 时 404,无害
 - 上游 rc.5 源码构建产物与 rc.6 npm 产物字节级一致(实测),UI 侧协议漂移风险低;升级仍须全量回归
 - **Phase 9 布局缝**(build-web-shell.mjs):对话模式 frame 网格强制 `0|1fr|0`(隐藏侧边栏/详情列,
-  拖拽条一并隐藏);Workspaces 模式 `#root` 撑宽 `max(1100px,100vw)`(> SIDEBAR_AUTO_COLLAPSE=1024
-  触发 AppFrame 非窄布局 → 侧边栏渲染宽版浏览器),窄视口下中心列 0 宽(media query)、宽视口正常双列
+  拖拽条一并隐藏);Workspaces 模式 = 独立页面的**全宽单栏**:`#root` 撑宽 `max(1100px,100vw)`
+  (> SIDEBAR_AUTO_COLLAPSE=1024 → AppFrame 非窄布局 → 侧边栏渲染宽版浏览器),frame 网格
+  `minmax(0,1fr) 0px 0px` 让侧边栏列占满整行,内容自适应窗口宽度;logo 行保留、仅隐藏折叠钮
 - **返回按钮不可插入 React 子树**(实测):上游组件重渲染会清除外部注入节点,点击随即失效;
   改为 body 直接子元素的固定悬浮按钮(z-index 1000),title 行 `padding-left: 36px` 让位
 - **heroGlow 是硬编码 SVG 色**(#6187D8,不读 token):去掉底色后仍透蓝光,shell.css 用
@@ -67,6 +68,10 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
   判断 UI 故障(上游正确渲染会话内错误消息)
 - 设置写回统一走 `settings.update({ns, patch})`(上游 store 同款);`settings.mutate` 载荷不同,勿混用;
   permission 命名空间 schema 只有 `defaultPreset` 可写(`preference` 是运行态镜像,写了无效)
+- **locale 运行中不热切换**(实测):settings.update 写 locale.preference 后,已打开的 webview 界面
+  语言不变(仅 boot 时应用);扩展在写回成功后重载 webview(settings-bridge onLocaleApplied → chat-panel reload)
+- **"Deep diving..." 状态行**:上游硬编码品牌蓝渐变(--dsw-static-deepseek-*)做 shimmer 文字;
+  shell.css 覆盖 background 为 `--dsh-host-accent`(--vscode-textLink-foreground)渐变,动画保留
 
 ## 执行
 

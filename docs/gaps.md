@@ -32,6 +32,12 @@
   preference 实际无效,Phase 9 修正为写 defaultPreset。
 - **会话历史中的错误卡片是数据不是故障**:上游正确渲染会话内错误消息(如 tool 调用失败),
   smoke 白屏检测改用 rootChildren + pageerror。
+- **locale 运行中切换不热生效**(实测:webview 已打开后 settings.update locale.preference 不触发
+  界面切换,仅 boot 时读取应用;浏览器版 3080 同行为)。扩展侧解法:语言写回实例成功后重载
+  webview(与 switch-session 同模式),boot 重新读语言。
+- **"Deep diving..." 状态行是硬编码品牌蓝渐变**(--dsw-static-deepseek-500/200 + background-clip
+  text + shimmer 动画):shell.css 覆盖 background 为 --dsh-host-accent(= --vscode-textLink-foreground)
+  渐变,动画与文字裁切保留。
   Phase 6 裁剪排除 directory-picker-* 后消失。
 
 
