@@ -166,6 +166,20 @@ const debugBridge = `
   };
   setTimeout(() => probe('T+2s'), 2000);
   setTimeout(() => probe('T+5s'), 5000);
+  // 显示层探针:CSS 是否加载(styleSheets)、body 计算背景色、首元素可见性
+  const probeDisplay = () => {
+    const root = document.getElementById('root');
+    const first = root && root.firstElementChild;
+    const sheets = Array.from(document.styleSheets).map((s) => {
+      try { return s.href ? s.href.split('/').pop().slice(0, 24) : 'inline'; } catch { return '?'; }
+    }).join(',');
+    const bodyBg = getComputedStyle(document.body).backgroundColor;
+    const rootRect = root ? root.getBoundingClientRect() : null;
+    send('info', 'sheets=' + document.styleSheets.length + '[' + sheets + '] bodyBg=' + bodyBg +
+      ' rootRect=' + (rootRect ? Math.round(rootRect.width) + 'x' + Math.round(rootRect.height) : 'none') +
+      ' first=' + (first ? first.tagName + '.' + String(first.className).slice(0, 40) : 'none'));
+  };
+  setTimeout(probeDisplay, 3000);
   // CSP 检测诊断:与 preload 的 querySelector 一致
   send('error', 'CSP-大写查询=' + (document.querySelector('meta[http-equiv="Content-Security-Policy"]') !== null)
     + ' CSP-小写查询=' + (document.querySelector('meta[http-equiv="content-security-policy"]') !== null)
