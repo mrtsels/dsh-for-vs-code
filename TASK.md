@@ -3,7 +3,7 @@
 > **进度快照(2026-08-17 10:31)**:Phase 5 ✅(源码构建打通,产物与 rc.6 字节级一致)、
 > Phase 6 ✅(定制 boot 图 39→28 + 静态侧边栏融合 + 代理重定向 + 会话切换桥)、
 > Phase 7 🔶(P7-2/3/4 ✅ 已提交;P7-1 功能回归待用户按 docs/manual-tests/phase-5.md 执行)、
-> Phase 8 ⏳(G1 审查代理运行中;G2/tag 待 P7-1 后)。
+> Phase 8 🔶(P8-1 G1 ✅ PASS;P8-2 G2 与 P8-3 tag 待 P7-1 人工回归后)。
 
 > 本版重写原因(2026-08-17 用户决策):
 >
@@ -130,7 +130,7 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 
 ### Phase 8:交付门
 
-- [ ] P8-1 G1 审查(Phase 5+6)FAIL→修复
+- [x] P8-1 G1 审查(Phase 5+6):docs/reviews/phase-5.md **PASS**(主代理出具,证据实测;独立子代理两轮超时)
 - [ ] P8-2 G2 交付门(全量回归:docs/manual-tests/phase-5.md 全项 + G0 + smoke-shell)
 - [ ] P8-3 tag + 发布文档
 
