@@ -22,7 +22,32 @@
 > (dsh:open-workspace 按标题匹配 → 复用 blank/最近会话或新建);列表默认全部展开、
 > 展开箭头隐藏 —— 页面上任何交互(返回/会话行/workspace 行/+ 按钮/新会话)均为页面跳转,
 > 无派生交互(唯一例外:workspace 行 ... 管理菜单)。
+> 会话管理页重构(2026-08-19,用户提供 ChatGPT 详细规格):放弃"拉伸侧边栏成整页"方案
+> (依赖 #root 撑宽到 1100px 骗过 SIDEBAR_AUTO_COLLAPSE=1024、frame 网格挤单栏、隐藏
+> chevron/强制展开 —— 本质仍是 sidebar 形态,窄侧边栏横向溢出)。改为**扩展自有 React 视图**
+> web/SessionView.tsx(web/session-view-main.tsx → dist/web/session-view.js,esbuild IIFE,
+> 由 build-web-shell.mjs 拷入 dsh-shell 并注入 #dsh-sessions-root):
+> - 独立单栏页面,宽度 100% 自适应(320~1400px 无横向滚动);header = 返回 + BrandWordmark
+>   logo(与上游 ui-primitives 同源 SVG)+ 新建会话;主体 = 扁平会话列表(整行可点);
+> - 数据与上游同源:经 __DSH_WEB_URL__ 代理调 session.list RPC(标题取 projections.values.title,
+>   blank 显示"新会话");无本地缓存/硬编码;
+> - 跳转即点即走:点击会话行 → 写 dsh.sessions.current(上游恢复键)→ 回传 switch-session:applied
+>   → 扩展重载 webview → boot 进入该会话(与 dsh:bootstrap-session 同一机制;无 setTimeout、
+>   不依赖 workspace 展开/workspace 树);
+> - 视图切换由 bridge 控制(chat ↔ sessions):sessions 模式隐藏 #root(display:none,React
+>   树保持挂载 store 不丢)、显示 #dsh-sessions-root;React 页经 __dshBridge.setView 返回;
+> - 移除:body.dsh-workspaces 全部 CSS(撑宽/网格/logoRow 让位/chevron)、expandAllWorkspaces、
+>   workspace 行/会话行拦截、400ms 延时返回、dsh:open-workspace 消息与扩展 handler。
+> 冒烟(smoke-shell.mjs)相应重写:586px 会话页无横向滚动、header/logo/新建按钮、会话行点击
+> 立即回传 switch-session:applied 并写恢复键、header 返回切回对话、320px 窄宽无溢出。
 > 待用户:扩展宿主窗口视觉确认(双击 启动扩展.command)。
+> 会话切换失效根因与修复(2026-08-20,P0):真实 webview 点击会话"无反应"。根因 =
+> SessionView.tsx 的 postToHost 二次调用 acquireVsCodeApi(每个 webview 只能 acquire 一次,
+> 第二次抛异常)→ 回退 window.parent.postMessage → 但 VS Code 已把 window.parent 指向自身,
+> 消息自我投递静默丢弃;headless 测试恰好走回退路径且 harness 帧真接收,故测试绿、真实环境
+> 死。修复 = postToHost 改经 window.__dshBridge.postToHost(bridge 持有唯一 acquire);
+> 独立调试环境无 bridge 时才回退 window.parent.postMessage。已按 VS Code 预加载源码
+> (pre/index.html)验证 once-guard 行为。
 
 > 本版重写原因(2026-08-17 用户决策):
 >

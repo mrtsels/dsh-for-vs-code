@@ -29,8 +29,6 @@ export type WebviewRequest =
   | { type: 'switch-session:applied'; sessionId: string }
   // webview 内"新会话"按钮被拦截 → 扩展用 VS Code 当前目录创建/复用会话(boot 桥写 localStorage)
   | { type: 'dsh:new-session' }
-  // 会话管理页 workspace 行点击 → 跳转到该 workspace(复用 blank/最近会话或新建)
-  | { type: 'dsh:open-workspace'; title: string; newSession: boolean }
   // webview 布局/语言自动诊断(扩展写入 .dsh-webview-diag.json 供排查)
   | { type: 'dsh:diag'; payload: Record<string, unknown> }
   // UI 语言与 VS Code 设置不符(boot 初始读取失败/推送丢失)→ 请扩展重载 webview

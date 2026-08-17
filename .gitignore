@@ -8,3 +8,4 @@ dist/
 .env
 .serena/
 references/
+.dsh-webview-diag*.json

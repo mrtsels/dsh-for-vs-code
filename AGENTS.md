@@ -54,28 +54,17 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
 - **mux 存在二进制帧**:上游客户端(rc.5/rc.6 一致)丢弃非文本帧,属已知行为非回归;UI 依赖的帧均为文本
 - `/plugins/events`(HMR dev SSE)在无 dev server 时 404,无害
 - 上游 rc.5 源码构建产物与 rc.6 npm 产物字节级一致(实测),UI 侧协议漂移风险低;升级仍须全量回归
-- **Phase 9 布局缝**(build-web-shell.mjs):对话模式 frame 网格强制 `0|1fr|0`(隐藏侧边栏/详情列,
-  拖拽条一并隐藏);Workspaces 模式 = 独立页面的**全宽单栏**:`#root` 撑宽 `max(1100px,100vw)`
-  (> SIDEBAR_AUTO_COLLAPSE=1024 → AppFrame 非窄布局 → 侧边栏渲染宽版浏览器),frame 网格
-  `minmax(0,1fr) 0px 0px` 让侧边栏列占满整行,内容自适应窗口宽度;logo 行保留、仅隐藏折叠钮
+
 - **webview 内"新会话"走扩展**:上游 startSession 落在最近 workspace(recentWorkspaceId),
   不保证链接 VS Code 目录;bridge 在 document capture 拦截 `[class$="_newSession"]`/logo
   wordmark(停止传播,上游不触发)→ postMessage dsh:new-session → 扩展 ensureFolderSession
   (当前目录)→ bootstrap-session → reload 进入;VIEW_KEY 置 chat 保证回到对话页
-- **会话管理页"全部跳转"交互**(用户准则,2026-08-18):workspace 行点击拦截为跳转
-  (dsh:open-workspace{title,newSession} → 扩展按标题匹配 workspace,复用 blank/最近会话或
-  新建 → bootstrap-session 跳转);workspace 行 ... 管理菜单保留;初始化自动展开全部 workspace
-  (expanding flag 防拦截)+ 隐藏 chevron —— 页面上无展开/折叠派生交互;rowActions 的 + 按钮
-  是最后一个 button(ellipsis 在 Menu 包裹 span 内,不在 rowActions 直接子级)
+
 - **会话切换按钮插 title 行内**(用户要求,2026-08-18):上游组件重渲染会清除注入节点 →
   MutationObserver(rAF)重插 + document capture 事件委托(按钮移除瞬间点击仍命中);
   空会话 hero 无 title 行 → fixed 悬浮兜底;Workspaces 页顶部 fixed 返回
-- **Workspaces 全宽需要双重覆盖**:frame 网格 `minmax(0,1fr) 0px 0px` 之外,SidebarRoot
-  根元素还有上游内联 `width: 280px`(拖拽偏好)→ 用
-  `[class$="_sidebarCol"] [class*="_root "] { width: 100% !important }` 覆盖
-- **`[class$="x"]` 匹配整个 class 属性值**(CSS 属性选择器语义):多类元素(root+quietBars)
-  整值以 quietBars 结尾,`[class$="_root"]` 会漏匹配 —— 用 `[class*="_root "]`(词尾含空格)
-  精准匹配"以 _root 结尾的类";这是 SidebarRoot 撑满问题的根因
+
+
 - **heroGlow 是硬编码 SVG 色**(#6187D8,不读 token):去掉底色后仍透蓝光,shell.css 用
   `[class$="_heroGlow"] ellipse { fill: var(--dsh-host-fg) !important; }` 覆盖(fill 属性可被 CSS 覆盖)
 - **主题 token 三层**:上游 ThemePresenter 会把主题 token 写成 body 内联变量(压过普通样式表),
@@ -95,6 +84,26 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
 - **"Deep diving..." 状态行**:上游硬编码品牌蓝渐变(--dsw-static-deepseek-*)做 shimmer 文字;
   shell.css 覆盖为 `--dsh-host-accent` 渐变,但**必须用 background-image 而非 background 简写**
   (简写会重置 background-clip:text → 文字透明只剩色块);background-clip/-webkit 前缀显式保留
+
+- **会话管理页 = 扩展自有 React 视图**(2026-08-19 起,取代拉伸侧边栏):上游没有独立
+  会话管理页(WorkspaceBrowser 就是侧边栏),且其 store 在 React context 内不可外部调用;
+  方案 = web/SessionView.tsx(esbuild IIFE → dist/web/session-view.js,由 build-web-shell.mjs
+  拷入 dsh-shell 并注入 `#dsh-sessions-root` + script):bridge 切 `chat`↔`sessions`
+  (sessions 隐藏 #root=display:none 保 store、显示自有页;React 页经 `window.__dshBridge.setView`
+  返回)。数据走 `__DSH_WEB_URL__` 代理调 session.list RPC(与上游同 wire;标题=
+  projections.values.title,blank=新会话);跳转 = 写 dsh.sessions.current(上游恢复键)+
+  回传 switch-session:applied → chat-panel 重注入 html 重载 → boot 进入该会话(与
+  dsh:bootstrap-session 同路径,无 setTimeout)。不再用任何 `dsh-workspaces` CSS/
+  expandAllWorkspaces/chevron/workspace 行拦截(已删)。改 vendor rev 后若
+  `#dsh-sessions-root` 注入或 session-view.js 拷贝失败,先看装配产物再更新脚本
+  (验证对象:dist/web/dsh-shell/index.html 的 </body> 前)
+
+- **webview 内 acquireVsCodeApi 只能 acquire 一次**(2026-08-20 实测根因):VS Code 预加载
+  脚本(webview pre/index.html)对第二次调用抛 'An instance of the VS Code API has already
+  been acquired',且会 `window.parent = window` —— 二次 acquire 失败后的
+  window.parent.postMessage 回退在真实 webview 是**自我投递(静默丢弃)**;headless 能过
+  只因 harness 帧真的接收。自建 React 视图回传宿主必须走 `window.__dshBridge.postToHost`
+  (bridge.js 在 head 持有唯一 acquire),不得自行二次 acquire
 
 ## 执行
 

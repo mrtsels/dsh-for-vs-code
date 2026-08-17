@@ -2,6 +2,8 @@
  * esbuild 构建:
  *   1. src/extension.ts  → dist/extension.js   (extension host, node, ESM, external vscode)
  *   2. web/changes-main.tsx → dist/web/changes.js (改动审查面板 webview)
+ *   3. web/session-view-main.tsx → dist/web/session-view.js (会话管理页 webview,
+ *      由 build-web-shell.mjs 拷入 dsh-shell 并注入 index.html)
  * 主 UI = dist/web/dsh-shell(上游源码构建产物,由 build-web-shell.mjs 装配)。
  * --watch 开发模式。
  */
@@ -23,6 +25,20 @@ const extension = {
   target: 'node22',
   sourcemap: true,
   external: ['vscode'],
+  logLevel: 'info',
+};
+
+/** @type {import('esbuild').BuildOptions} */
+const sessionView = {
+  entryPoints: [resolve(app, 'web/session-view-main.tsx')],
+  outfile: resolve(app, 'dist/web/session-view.js'),
+  bundle: true,
+  platform: 'browser',
+  format: 'iife',
+  target: 'es2022',
+  jsx: 'automatic',
+  sourcemap: true,
+  define: { 'process.env.NODE_ENV': '"production"' },
   logLevel: 'info',
 };
 
@@ -61,14 +77,14 @@ async function main() {
   mkdirSync(resolve(app, 'dist/web'), { recursive: true });
   writeFileSync(resolve(app, 'dist/web/changes.html'), changesSkeleton);
   if (watch) {
-    for (const options of [extension, changes]) {
+    for (const options of [extension, changes, sessionView]) {
       const ctx = await buildContext(options);
       await ctx.watch();
     }
     console.log('[watch] watching… (Ctrl+C 退出)');
   } else {
-    await Promise.all([build(extension), build(changes)]);
-    console.log('dist/extension.js + dist/web/changes.js 构建完成');
+    await Promise.all([build(extension), build(changes), build(sessionView)]);
+    console.log('dist/extension.js + dist/web/changes.js + dist/web/session-view.js 构建完成');
   }
 }
 

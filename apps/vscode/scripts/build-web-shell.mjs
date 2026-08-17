@@ -150,9 +150,9 @@ const EXCLUDE_PLUGINS = new Set([
  *
  * 布局(Phase 9):
  * - 对话模式(默认):frame 网格强制 0|1fr|0 —— 只显示对话面板(侧边栏/详情列/拖拽条隐藏);
- * - Workspaces 模式(body.dsh-workspaces):#root 撑宽到 1100px(> SIDEBAR_AUTO_COLLAPSE=1024,
- *   让 AppFrame 判定非窄布局 → 侧边栏渲染宽版工作区浏览器),frame 网格强制 280|1fr|0,
- *   可视区恰为左侧 280px 侧边栏内容(原侧边栏内容的独立页面)。
+ * - 会话管理页(body.dsh-sessions):扩展自有 React 视图(web/SessionView.tsx → session-view.js),
+ *   独立于上游 #root(display:none),宽度 100% 自适应 webview —— 不撑宽根、不依赖
+ *   SIDEBAR_AUTO_COLLAPSE、无展开/折叠/workspace 树(取代 08-18 的"拉伸侧边栏"方案)。
  *
  * 主题(Phase 9):上游 --dsw-alias/--dsw-specific 语义 token 全部重映射到 VS Code 主题变量
  * (--vscode-*);宿主背景区分侧边栏(sideBar-background)与编辑器面板(editor-background),
@@ -281,23 +281,67 @@ body, body[data-ds-dark-theme] {
 [class$="_sidebarCol"] { overflow: hidden; }
 [class$="_handle"] { display: none !important; }
 
-/* ---- Workspaces 模式:独立页面的单栏完整内容(不是 sidebar 形态)。
-       root 撑宽到 max(1100px,100vw)(> SIDEBAR_AUTO_COLLAPSE=1024 → AppFrame 判定非窄
-       布局 → 侧边栏渲染宽版工作区浏览器);grid 让侧边栏列占满整行(单栏),
-       内容自适应窗口宽度(窄侧边栏与宽面板都全宽)。
-       logo(wordmark)保留在顶部,仅隐藏折叠钮;返回按钮 fixed 左上角,logo 行让位。 ---- */
-body.dsh-workspaces { overflow: hidden !important; }
-body.dsh-workspaces #root { width: max(1100px, 100vw) !important; }
-body.dsh-workspaces [class$="_frame"] { grid-template-columns: minmax(0, 1fr) 0px 0px !important; }
-/* SidebarRoot 根元素上游内联 width(280px 拖拽偏好)会限制内容宽度 → 覆盖为 100% 撑满。
-   坑:[class$="_root"] 匹配"整个 class 属性值"以 _root 结尾 —— 根元素是 root+quietBars
-   双类(整值以 quietBars 结尾)会漏匹配;必须用 [class*="_root"](子串)。
-   slot 渲染在 sidebarCol 内还有 display:contents 包裹层,用后代选择器。 */
-body.dsh-workspaces [class$="_sidebarCol"] [class*="_root "] { width: 100% !important; }
-body.dsh-workspaces [class$="_logoRow"] { padding-left: 40px !important; }
-body.dsh-workspaces [class$="_toggle"] { display: none !important; }
-/* 会话管理页无展开/折叠派生交互:隐藏 workspace 行展开箭头(默认全部展开) */
-body.dsh-workspaces [class$="_chevron"] { display: none !important; }
+/* ---- 会话管理页(独立单栏页面,扩展自有 React 视图,见 web/SessionView.tsx)。
+       不再是"拉伸侧边栏":不撑宽 #root、不依赖 SIDEBAR_AUTO_COLLAPSE、无展开/折叠。
+       页面宽度 100%,任意 webview 宽度(320~1400px)不横向溢出。 ---- */
+#dsh-sessions-root { width: 100%; height: 100vh; }
+#dsh-sessions-root[hidden] { display: none !important; }
+.dsh-session-page {
+  display: flex; flex-direction: column;
+  width: 100%; height: 100%; min-width: 0; max-width: 100%;
+  box-sizing: border-box; overflow-x: hidden;
+}
+.dsh-session-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; flex: none;
+  border-bottom: 1px solid var(--dsw-alias-border-l1, var(--dsh-host-border));
+}
+.dsh-session-back {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex: none; border-radius: 6px;
+  border: none; background: transparent; color: var(--dsh-host-fg);
+  cursor: pointer; padding: 0;
+}
+.dsh-session-back:hover { background: var(--dsh-host-hover); }
+.dsh-session-logo { color: var(--dsh-host-fg); flex: none; }
+.dsh-session-new {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+  height: 28px; padding: 0 10px; border-radius: 6px; flex: none;
+  border: none; background: var(--dsh-host-button-bg); color: var(--dsh-host-button-fg);
+  font-size: 12px; line-height: 1; cursor: pointer; white-space: nowrap;
+}
+.dsh-session-new:hover { background: var(--dsh-host-button-hover); }
+.dsh-session-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px; }
+.dsh-session-section {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg));
+  margin: 2px 0 8px;
+}
+.dsh-session-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.dsh-session-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; min-width: 0; box-sizing: border-box;
+  padding: 8px 10px; border: none; border-radius: 6px;
+  background: transparent; color: var(--dsw-alias-label-primary, var(--dsh-host-fg));
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.dsh-session-item:hover { background: var(--dsh-host-hover); }
+.dsh-session-item-current { background: var(--dsh-host-active); }
+.dsh-session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.dsh-session-running {
+  flex: none; width: 6px; height: 6px; border-radius: 50%; margin-left: auto;
+  background: var(--dsh-host-success, #73c991);
+}
+.dsh-session-state {
+  padding: 24px 12px; text-align: center;
+  color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg)); font-size: 13px;
+}
+.dsh-session-error { font-size: 11px; margin: 6px 0; word-break: break-all; color: var(--dsh-host-error); }
+.dsh-session-retry {
+  margin-top: 8px; height: 26px; padding: 0 12px; border-radius: 6px;
+  border: none; background: var(--dsh-host-button-bg); color: var(--dsh-host-button-fg);
+  cursor: pointer;
+}
 
 /* ---- 会话切换按钮:对话模式插入 session title 行内(与面包屑同行);
        空会话 hero 与 Workspaces 页用 fixed 悬浮(左上角) ---- */
@@ -310,13 +354,7 @@ body.dsh-workspaces [class$="_chevron"] { display: none !important; }
 .dsh-back-button:hover { background: var(--dsh-host-hover); }
 .dsh-back-button svg { width: 15px; height: 15px; }
 .dsh-back-title { margin-right: 4px; }
-.dsh-back-floating,
-.dsh-back-workspaces { position: fixed; top: 8px; left: 8px; z-index: 1000; }
-.dsh-back-workspaces {
-  background: var(--dsh-host-bg); border: 1px solid var(--dsh-host-border);
-  box-shadow: 0 1px 4px color-mix(in srgb, #000 25%, transparent);
-}
-.dsh-back-workspaces:hover { background: var(--dsh-host-hover); }
+.dsh-back-floating { position: fixed; top: 8px; left: 8px; z-index: 1000; }
 
 /* ---- hero 背景光斑:上游 SVG 硬编码 #6187D8(去掉底色后仍透蓝光);
        CSS fill 覆盖为宿主前景色(透明度保留) ---- */
@@ -342,18 +380,20 @@ body.dsh-workspaces [class$="_chevron"] { display: none !important; }
 const shortId = (id) => id.replace('@deepseek-ai/', '');
 
 /**
- * 装配桥(静态,与 shell rev 绑定),五个职责:
+ * 装配桥(静态,与 shell rev 绑定),职责:
  * 1. 首开会话:__DSH_BOOT_SESSION__ 仅在 localStorage 无 dsh.sessions.current 时写入
  *    (上游 attachPersistence 的恢复键;已有值则尊重用户上次会话);
  * 2. 主题同步:data-ds-dark-theme / color-scheme 始终跟随 VS Code 主题(matchMedia
  *    prefers-color-scheme;webview 内该媒体查询与 VS Code 主题联动),MutationObserver
  *    压过上游 ThemePresenter 按 web 偏好写的值(值变才写,防循环);
  * 3. 宿主类型:__DSH_HOST__(sidebar|panel)→ body[data-dsh-host](shell.css 主题变量切换);
- * 4. 布局:对话模式 → title 行左侧返回按钮(空会话 hero 用悬浮兜底);点击进入
- *    Workspaces 模式(原侧边栏内容整页,body.dsh-workspaces);工作区页点会话行/
- *    新建按钮自动返回;视图偏好持久化(dsh.ui.view);
- * 5. 会话切换桥(既有):'dsh:switch-session' → localStorage 写 dsh.sessions.current
- *    → 回 post 'switch-session:applied'(chat-panel 重注入 html 完成重载)。
+ * 4. 视图:chat(对话)| sessions(独立会话管理页,web/SessionView.tsx React 视图)。
+ *    对话模式:title 行左侧返回按钮(空会话 hero 用悬浮兜底);点击进入 sessions ——
+ *    隐藏 #root、显示 #dsh-sessions-root(扩展自有页面,非侧边栏拉伸);会话页 header
+ *    自带返回(经 __dshBridge.setView 切回)。视图偏好持久化(dsh.ui.view);
+ * 5. 会话跳转桥:webview 内打开会话(React 页写 localStorage + 回传 switch-session:applied)
+ *    → chat-panel 重注入 html 完成重载;扩展侧 dsh:switch-session / dsh:bootstrap-session
+ *    消息 → 写 localStorage → 回 post 'switch-session:applied'(同一路径)。
  * 无 acquireVsCodeApi 的环境(纯浏览器调试/冒烟)下静默,不影响 UI。
  */
 const BRIDGE_JS = `(() => {
@@ -398,7 +438,6 @@ const BRIDGE_JS = `(() => {
 
   // 2/3. 宿主类型 + 主题同步(值变才写,防 MutationObserver 自激循环);
   // 脚本位于 head,body 尚未解析 —— DOM 工作统一在 DOMContentLoaded 后做
-
   const applyTheme = () => {
     let dark = false;
     try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (err) { dark = false; }
@@ -425,53 +464,58 @@ const BRIDGE_JS = `(() => {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startThemeSync);
   else startThemeSync();
 
-  // 4. 布局:会话切换按钮。用户要求:放在 session title 行左侧(插入 titleRow 首子元素,
-  // 与面包屑同行对齐);React 重渲染可能清除注入节点 → rAF 级重插 + document capture
-  // 事件委托(按钮被移除瞬间点击仍能命中)。空会话 hero 无 title 行 → fixed 悬浮兜底;
-  // Workspaces 页(全宽单栏)顶部 fixed 返回。
+  // 4. 视图:chat ↔ sessions(独立会话管理页,非侧边栏拉伸)。sessions 模式隐藏上游
+  //    #root(display:none,React 树保持挂载,store 不丢),显示扩展自有页面;
+  //    React 页经 __dshBridge.setView 切回 chat。
   const setView = (view) => {
-    document.body.classList.toggle('dsh-workspaces', view === 'workspaces');
+    const sessions = view === 'sessions';
+    document.body.classList.toggle('dsh-sessions', sessions);
+    const root = document.getElementById('root');
+    const sessionsRoot = document.getElementById('dsh-sessions-root');
+    if (root !== null) root.style.display = sessions ? 'none' : '';
+    if (sessionsRoot !== null) {
+      sessionsRoot.hidden = !sessions;
+      if (sessions) {
+        window.dispatchEvent(new CustomEvent('dsh:view', { detail: 'sessions' }));
+      }
+    }
     try { localStorage.setItem(VIEW_KEY, view); } catch (err) {}
     ensureBackButton();
-    if (view === 'workspaces') window.setTimeout(expandAllWorkspaces, 250);
   };
+  // 会话管理页 header 自带返回按钮(React 视图),bridge 只负责对话模式按钮:
+  // 插入 session title 行左侧(与面包屑同行对齐)。React 重渲染可能清除注入节点 →
+  // rAF 级重插 + document capture 事件委托(按钮被移除瞬间点击仍能命中)。
+  // 空会话 hero 无 title 行 → fixed 悬浮兜底。
   const ensureBackButton = () => {
     document.querySelectorAll('.dsh-back-button').forEach((n) => n.remove());
+    if (document.body.classList.contains('dsh-sessions')) return;
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'dsh-back-button';
     btn.innerHTML = SESSIONS_ICON;
-    if (document.body.classList.contains('dsh-workspaces')) {
-      btn.classList.add('dsh-back-workspaces');
-      btn.title = '返回对话';
-      btn.setAttribute('aria-label', btn.title);
-      document.body.appendChild(btn);
-      return;
-    }
     const titleRow = document.querySelector('[class$="_titleRow"]');
     const header = titleRow === null ? null : titleRow.closest('[class$="_header"]');
     const headerHidden = header !== null && header.getAttribute('aria-hidden') === 'true';
     if (titleRow !== null && !headerHidden) {
       btn.classList.add('dsh-back-title');
-      btn.title = 'Workspaces';
+      btn.title = 'Sessions';
       btn.setAttribute('aria-label', btn.title);
       titleRow.insertBefore(btn, titleRow.firstChild);
     } else {
       // 空会话 hero:无 title 行,固定悬浮兜底
       btn.classList.add('dsh-back-floating');
-      btn.title = 'Workspaces';
+      btn.title = 'Sessions';
       btn.setAttribute('aria-label', btn.title);
       document.body.appendChild(btn);
     }
   };
-  // React 重渲染清除 title 行内按钮 → rAF 重插(微任务窗口内点击不丢)
   let reinsertPending = false;
   const scheduleReinsert = () => {
     if (reinsertPending) return;
     reinsertPending = true;
     requestAnimationFrame(() => {
       reinsertPending = false;
-      if (!document.body.classList.contains('dsh-workspaces')) {
+      if (!document.body.classList.contains('dsh-sessions')) {
         const titleRow = document.querySelector('[class$="_titleRow"]');
         if (titleRow !== null && titleRow.querySelector('.dsh-back-title') === null) {
           ensureBackButton();
@@ -479,64 +523,14 @@ const BRIDGE_JS = `(() => {
       }
     });
   };
-  // 点击委托(document capture):会话管理页全部交互 = 页面跳转(非派生)。
-  // 1) 顶部"新会话"/logo wordmark → 扩展按 VS Code 目录建会话(跳转);
-  // 2) 会话切换按钮 → 切换视图;3) 会话行 → 打开该会话并返回对话(跳转);
-  // 4) workspace 行(主体/+ 按钮)→ 跳转到该 workspace(复用 blank/最近会话或新建);
-  //    ... 管理菜单按钮保留(重命名/删除);初始化展开期间的自动点击不拦截。
-  let expanding = false;
-  const expandAllWorkspaces = () => {
-    if (expanding) return;
-    expanding = true;
-    const rows = [...document.querySelectorAll('[class$="_projectRow"]')];
-    for (const row of rows) {
-      if (row.getAttribute('aria-expanded') !== 'true') row.click();
-    }
-    window.setTimeout(() => { expanding = false; }, 80);
-  };
-  const ensureExpanded = () => {
-    if (!document.body.classList.contains('dsh-workspaces')) return;
-    expandAllWorkspaces();
-  };
+  // 点击委托(document capture):对话模式返回按钮 → 进入会话管理页。
+  // 会话页内的交互(返回/会话行/新建)由 React 视图自行处理,桥不拦截。
   document.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    // 新会话拦截(workspaces 页顶部按钮 + logo wordmark 快捷方式)
-    const newSession = target.closest('[class$="_newSession"], [class$="_brand"]');
-    if (newSession !== null) {
-      event.stopPropagation();
-      event.preventDefault();
-      try { localStorage.setItem(VIEW_KEY, 'chat'); } catch (err) {}
-      postToHost({ type: 'dsh:new-session' });
-      return;
-    }
     if (target.closest('.dsh-back-button') !== null) {
       event.stopPropagation();
-      setView(document.body.classList.contains('dsh-workspaces') ? 'chat' : 'workspaces');
-      return;
-    }
-    if (!document.body.classList.contains('dsh-workspaces') || expanding) return;
-    const sessionRow = target.closest('[class$="_sessionRow"]');
-    if (sessionRow !== null) {
-      // 延迟略长:给上游打开会话(open/connect)留时间,退出后对话页即显示目标会话
-      window.setTimeout(() => { setView('chat'); }, 400);
-      return;
-    }
-    // workspace 行:跳转(该 workspace 复用 blank/最近会话,或 + 按钮强制新建)
-    const projectRow = target.closest('[class$="_projectRow"]');
-    if (projectRow !== null) {
-      const titleEl = projectRow.querySelector('[class$="_title"]');
-      const title = (titleEl?.textContent ?? '').trim();
-      if (title === '') return;
-      const rowActions = projectRow.querySelector('[class$="_rowActions"]');
-      const buttons = rowActions === null ? [] : [...rowActions.querySelectorAll('button')];
-      const plusBtn = buttons.length > 0 ? buttons[buttons.length - 1] : null;
-      const clickedButton = target.closest('button');
-      if (clickedButton !== null && clickedButton !== plusBtn) return; // ... 管理菜单保留
-      event.stopPropagation();
-      event.preventDefault();
-      try { localStorage.setItem(VIEW_KEY, 'chat'); } catch (err) {}
-      postToHost({ type: 'dsh:open-workspace', title, newSession: clickedButton !== null });
+      setView('sessions');
       return;
     }
   }, true);
@@ -548,7 +542,7 @@ const BRIDGE_JS = `(() => {
       if ((document.body !== null && document.getElementById('root') !== null) || attempts > 100) {
         window.clearInterval(timer);
         let view = 'chat';
-        try { view = localStorage.getItem(VIEW_KEY) === 'workspaces' ? 'workspaces' : 'chat'; } catch (err) {}
+        try { view = localStorage.getItem(VIEW_KEY) === 'sessions' ? 'sessions' : 'chat'; } catch (err) {}
         setView(view);
         // 语言对齐:boot 后 2s 立即尝试一次(优先 setLocale 桥),之后周期检测
         window.setTimeout(() => {
@@ -562,7 +556,6 @@ const BRIDGE_JS = `(() => {
         if (typeof MutationObserver !== 'undefined') {
           const observer = new MutationObserver(() => {
             scheduleReinsert();
-            ensureExpanded();
           });
           observer.observe(document.body, { childList: true, subtree: true });
         }
@@ -655,9 +648,11 @@ const BRIDGE_JS = `(() => {
   }, 5000);
   // 语言硬切换主通道:直接驱动上游 setLocale(官方公共方法:立即切 UI + 写回实例),
   // 绕过 settings 快照/推送链(该链在 webview 环境实测不可靠)。周期检测 UI 语言,
-  // 不符则调用,直到一致或达上限。
+  // 不符则调用,直到一致或达上限。会话管理页(sessions)无上游 tab/hero,跳过检测
+  // (页面语言由 __DSH_LOCALE__ 直接决定,不需要驱动)。
   let localeChecks = 0;
   const localeCheckTimer = window.setInterval(() => {
+    if (document.body.classList.contains('dsh-sessions')) return; // 会话页不驱动上游语言
     const target = window.__DSH_LOCALE__;
     if (target !== 'zh' && target !== 'en') { window.clearInterval(localeCheckTimer); return; }
     if (detectUiLocale() === target || localeChecks >= 10) { window.clearInterval(localeCheckTimer); return; }
@@ -678,23 +673,20 @@ const BRIDGE_JS = `(() => {
   // 回传扩展写入本地文件(.dsh-webview-diag.json),便于排查环境差异。
   const collectDiag = () => {
     const frame = document.querySelector('[class$="_frame"]');
-    const sidebarRoot = document.querySelector('[class$="_sidebarCol"] [class*="_root "]');
-    const tabs = [...document.querySelectorAll('[class$="_tab"]')];
-    const tabText = tabs.map((t) => t.textContent ?? '').join(' ');
+    const root = document.getElementById('root');
+    const sessionsRoot = document.getElementById('dsh-sessions-root');
     return {
       viewport: window.innerWidth,
       frameWidth: frame === null ? null : Math.round(frame.getBoundingClientRect().width),
       frameGrid: frame === null ? null : getComputedStyle(frame).gridTemplateColumns,
-      sidebarRootWidth: sidebarRoot === null ? null : Math.round(sidebarRoot.getBoundingClientRect().width),
-      sidebarRootInline: sidebarRoot === null ? null : (sidebarRoot.getAttribute('style') || ''),
-      inWorkspaces: document.body.classList.contains('dsh-workspaces'),
+      inSessions: document.body.classList.contains('dsh-sessions'),
+      rootDisplay: root === null ? null : getComputedStyle(root).display,
+      sessionsRootHidden: sessionsRoot === null ? null : sessionsRoot.hidden,
       navLang: navigator.language,
       dshLocale: window.__DSH_LOCALE__ ?? null,
       uiLocale: detectUiLocale(),
-      tabText,
-      viewKey: localStorage.getItem('dsh.ui.view'),
-      sessionRows: document.querySelectorAll('[class$="_sessionRow"]').length,
-      projectRows: document.querySelectorAll('[class$="_projectRow"]').length,
+      viewKey: localStorage.getItem(VIEW_KEY),
+      sessionRows: document.querySelectorAll('.dsh-session-item').length,
       bootSession: (() => { try { return localStorage.getItem(BOOT_SESSION_KEY); } catch (err) { return null; } })(),
     };
   };
@@ -708,13 +700,23 @@ const BRIDGE_JS = `(() => {
       postToHost({ type: 'dsh:diag', payload });
     } catch (err) {}
   };
-  window.setTimeout(reportDiag, 3000); // boot 后
-  if (typeof MutationObserver !== 'undefined') {
-    const diagObserver = new MutationObserver(() => { reportDiag(); });
-    diagObserver.observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: false });
-  }
+  // 诊断观察需 body 已存在(bridge 位于 head,body 解析前 observe 会抛错并中断
+  // 后续桥注册 —— 曾致 __dshBridge/switch-session 监听未注册);统一 DOMContentLoaded 后启动
+  const startDiag = () => {
+    try {
+      window.setTimeout(reportDiag, 3000); // boot 后
+      if (typeof MutationObserver !== 'undefined' && document.body !== null) {
+        const diagObserver = new MutationObserver(() => { reportDiag(); });
+        diagObserver.observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: false });
+      }
+    } catch (err) { /* 诊断观察失败不影响主桥 */ }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startDiag);
+  else startDiag();
 
-  // 6. 会话切换桥(既有 + Phase 9 bootstrap:同一写入路径,不同消息名)
+  // 6. 会话跳转桥:扩展侧 dsh:switch-session / dsh:bootstrap-session → 写恢复键 →
+  //    回传 applied(chat-panel 重注入 html 完成重载)。会话管理页(React 视图)直接
+  //    写恢复键并回传 applied,走同一路径。
   window.addEventListener('message', (event) => {
     const msg = event.data;
     if (msg === null || typeof msg !== 'object') return;
@@ -727,6 +729,8 @@ const BRIDGE_JS = `(() => {
       console.error('[dsh-bridge] switch-session:', String(err));
     }
   });
+  // 供会话管理页(React 视图)使用:切视图 + 回传宿主
+  window.__dshBridge = { setView, postToHost };
 })();
 `;
 
@@ -755,13 +759,24 @@ async function main() {
   // 1. 拷贝 shell 产物
   rmSync(dest, { recursive: true, force: true });
   cpSync(SHELL_DIST, dest, { recursive: true });
+  // 扩展自有 React 视图:会话管理页 bundle(web/session-view-main.tsx → dist/web/session-view.js,
+  // 由 scripts/build.mjs 构建)。拷贝进 dsh-shell 并注入 index.html(独立于上游 #root 的页面)。
+  const sessionViewSrc = join(repoRoot, 'apps', 'vscode', 'dist', 'web', 'session-view.js');
+  if (!existsSync(sessionViewSrc)) {
+    throw new Error(
+      `会话管理页 bundle 缺失:${sessionViewSrc}(先跑 pnpm --filter dsh-for-vscode run build)`,
+    );
+  }
+  cpSync(sessionViewSrc, join(dest, 'session-view.js'));
   const shellHtml = join(dest, 'index.html');
   if (!existsSync(shellHtml)) throw new Error(`shell index.html 缺失:${shellHtml}`);
-  // 绝对路径改相对;去掉 manifest/favicon(webview 内 404,同时不随 VSIX 分发)
+  // 绝对路径改相对;去掉 manifest/favicon(webview 内 404,同时不随 VSIX 分发);
+  // 注入会话管理页挂载点(独立于上游 #root,默认 hidden,bridge 切换视图时显示)
   let html = readFileSync(shellHtml, 'utf8')
     .replace(/(src|href)="\//g, '$1="./')
     .replace(/<link rel="manifest"[^>]*>\s*/g, '')
-    .replace(/<link rel="icon"[^>]*>\s*/g, '');
+    .replace(/<link rel="icon"[^>]*>\s*/g, '')
+    .replace(/<\/body>/i, '<div id="dsh-sessions-root" hidden></div><script src="./session-view.js"></script></body>');
   writeFileSync(shellHtml, html);
   rmSync(join(dest, 'manifest.webmanifest'), { force: true });
   rmSync(join(dest, 'favicon.svg'), { force: true });

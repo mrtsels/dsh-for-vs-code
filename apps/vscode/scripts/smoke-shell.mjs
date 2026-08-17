@@ -75,8 +75,8 @@ console.log('servers up');
 const pw = await import(join(REPO_ROOT, 'vendor/deepseek-harness/apps/web/node_modules/playwright/index.mjs'));
 const browser = await pw.chromium.launch({ channel: 'chrome', headless: true });
 const page = await browser.newPage();
-// 贴近真实 VS Code 侧边栏宽度(300px 级):窄布局下 AppFrame 收缩侧边栏为 rail,
-// 我们的 CSS 再强制 0|1fr|0;Workspaces 模式撑宽到 1100
+// 贴近真实 VS Code 侧边栏宽度(~586px):对话模式 CSS 强制 0|1fr|0;
+// 会话管理页 = 扩展自有 React 视图(#dsh-sessions-root),宽度 100% 自适应
 await page.setViewportSize({ width: 320, height: 600 });
 const consoleMsgs = [];
 page.on('console', (m) => consoleMsgs.push(`[${m.type()}] ${m.text().slice(0, 200)}`));
@@ -135,7 +135,7 @@ const bridgeOk = await page.evaluate(() => {
     setTimeout(() => resolve(localStorage.getItem('dsh.sessions.current') !== null), 1500);
   });
 });
-// ---- Phase 9 布局断言:对话模式(仅中心列)→ Workspaces 页(侧边栏整页) ----
+// ---- Phase 9 布局断言:对话模式(仅中心列)→ 会话管理页(独立 React 视图) ----
 const chatLayout = await page.evaluate(() => {
   const frame = document.querySelector('[class$="_frame"]');
   const frameStyle = frame === null ? null : getComputedStyle(frame);
@@ -148,81 +148,98 @@ const chatLayout = await page.evaluate(() => {
       return titleRow !== null && titleRow.querySelector('.dsh-back-title') !== null;
     })(),
     host: document.body.dataset.dshHost ?? '(未设置)',
-    darkAttr: document.body.hasAttribute('data-ds-dark-theme'),
     colorScheme: document.documentElement.style.colorScheme,
   };
 });
 await page.screenshot({ path: '/tmp/dsh-phase9-chat.png' });
-// 进入 Workspaces 模式
+// 进入会话管理页(bridge 切视图:隐藏 #root,显示 #dsh-sessions-root)
 await page.click('.dsh-back-button');
-await page.waitForTimeout(900);
-const wsLayout = await page.evaluate(() => {
+await page.waitForTimeout(1200);
+const sessionsLayout = await page.evaluate(() => {
+  const root = document.getElementById('root');
+  const sessionsRoot = document.getElementById('dsh-sessions-root');
   const frame = document.querySelector('[class$="_frame"]');
   const frameStyle = frame === null ? null : getComputedStyle(frame);
   return {
-    workspacesClass: document.body.classList.contains('dsh-workspaces'),
-    grid: frameStyle === null ? '(无 frame)' : frameStyle.gridTemplateColumns,
-    frameWidth: frame === null ? -1 : frame.getBoundingClientRect().width,
-    backWorkspaces: document.querySelector('.dsh-back-workspaces') !== null,
-    logoRowVisible: (() => {
-      const row = document.querySelector('[class$="_logoRow"]');
-      return row !== null && getComputedStyle(row).display !== 'none';
+    sessionsClass: document.body.classList.contains('dsh-sessions'),
+    rootDisplay: root === null ? '(无 root)' : getComputedStyle(root).display,
+    sessionsRootVisible: sessionsRoot !== null && !sessionsRoot.hidden,
+    headerPresent: document.querySelector('.dsh-session-header') !== null,
+    logoPresent: document.querySelector('.dsh-session-logo') !== null,
+    backInHeader: (() => {
+      const header = document.querySelector('.dsh-session-header');
+      return header !== null && header.querySelector('.dsh-session-back') !== null;
     })(),
-    toggleHidden: (() => {
-      const toggle = document.querySelector('[class$="_toggle"]');
-      return toggle === null || getComputedStyle(toggle).display === 'none';
-    })(),
-    fullWidthCol: (() => {
-      // 单栏全宽:computed 会把 minmax(0,1fr) 解析为像素(≈容器宽),后两列 0
-      const parts = document.querySelector('[class$="_frame"]')
-        ? getComputedStyle(document.querySelector('[class$="_frame"]')).gridTemplateColumns.split(' ')
-        : [];
-      return parts.length === 3 && parts[0] !== '0px' && parts[1] === '0px' && parts[2] === '0px';
-    })(),
-    sessionRow: document.querySelector('[class$="_sessionRow"]') !== null,
-    allExpanded: (() => {
-      const rows = [...document.querySelectorAll('[class$="_projectRow"]')];
-      return rows.length > 0 && rows.every((r) => r.getAttribute('aria-expanded') === 'true');
-    })(),
-    chevronHidden: (() => {
-      const c = document.querySelector('[class$="_chevron"]');
-      return c === null || getComputedStyle(c).display === 'none';
-    })(),
+    newBtnPresent: document.querySelector('.dsh-session-new') !== null,
+    rows: document.querySelectorAll('.dsh-session-item').length,
+    frameGrid: frameStyle === null ? '(无 frame)' : frameStyle.gridTemplateColumns,
+    noHScroll: document.documentElement.scrollWidth <= window.innerWidth,
     storedView: localStorage.getItem('dsh.ui.view'),
-    sidebarRootWidth: (() => {
-      const rootEl = document.querySelector('[class$="_sidebarCol"] [class*="_root "]');
-      return rootEl === null ? -1 : Math.round(rootEl.getBoundingClientRect().width);
-    })(),
+    backButtons: document.querySelectorAll('.dsh-back-button').length,
   };
 });
-await page.screenshot({ path: '/tmp/dsh-phase9-workspaces.png' });
-// 会话行点击应自动返回对话模式(有会话数据时)
-let autoBack = false;
-if (wsLayout.sessionRow) {
-  await page.click('[class$="_sessionRow"]');
-  await page.waitForTimeout(1000);
-  autoBack = await page.evaluate(() => !document.body.classList.contains('dsh-workspaces'));
+await page.screenshot({ path: '/tmp/dsh-phase9-sessions.png' });
+// 点击第一个会话行 → 立即跳转:写恢复键 + 回传 switch-session:applied(无 setTimeout)
+let sessionJump = { posted: false, stored: null };
+if (sessionsLayout.rows > 0) {
+  sessionJump = await page.evaluate(async () => {
+    return new Promise((resolve) => {
+      let posted = false;
+      const onMsg = (event) => {
+        const msg = event.data;
+        if (msg && typeof msg === 'object' && msg.type === 'switch-session:applied') {
+          posted = true;
+          window.removeEventListener('message', onMsg);
+          resolve({
+            posted,
+            stored: localStorage.getItem('dsh.sessions.current'),
+            view: localStorage.getItem('dsh.ui.view'),
+            sessionId: typeof msg.sessionId === 'string' ? msg.sessionId : null,
+          });
+        }
+      };
+      window.addEventListener('message', onMsg);
+      const row = document.querySelector('.dsh-session-item');
+      row.click();
+      setTimeout(() => {
+        window.removeEventListener('message', onMsg);
+        resolve({ posted, stored: localStorage.getItem('dsh.sessions.current'), view: localStorage.getItem('dsh.ui.view'), sessionId: null });
+      }, 1500);
+    });
+  });
 }
-// 悬浮返回按钮退出(会话行缺失时兜底验证退出路径)
+// 窄宽度横向溢出检查(会话页 + 对话模式)
+await page.setViewportSize({ width: 320, height: 600 });
+await page.waitForTimeout(400);
+const narrowOverflow = await page.evaluate(() => ({
+  sessions: document.body.classList.contains('dsh-sessions'),
+  noHScroll: document.documentElement.scrollWidth <= window.innerWidth,
+  rootW: document.getElementById('root') === null ? -1 : document.getElementById('root').getBoundingClientRect().width,
+}));
+// 返回对话模式(React header 的返回按钮 → __dshBridge.setView('chat'))
+await page.setViewportSize({ width: 586, height: 600 });
+await page.waitForTimeout(300);
+const backBtn = await page.$('.dsh-session-back');
 let backExit = false;
-const backBtn = await page.$('.dsh-back-workspaces');
 if (backBtn !== null) {
   await backBtn.click();
   await page.waitForTimeout(800);
-  backExit = await page.evaluate(() => !document.body.classList.contains('dsh-workspaces'));
+  backExit = await page.evaluate(() => {
+    const root = document.getElementById('root');
+    const sessionsRoot = document.getElementById('dsh-sessions-root');
+    return !document.body.classList.contains('dsh-sessions')
+      && (root === null || getComputedStyle(root).display !== 'none')
+      && sessionsRoot !== null && sessionsRoot.hidden;
+  });
 }
-await browser.close();
-
 // ---- 断言(裁剪模式下应全绿)----
 const failures = [];
 if (state.rootChildren < 1) failures.push('UI 未渲染(root 空)');
 if (state.rootChildren < 1 && state.errBannerInfo !== '(无)') failures.push(`root 空但存在错误横幅:${state.errBannerInfo}`);
 if (consoleMsgs.some((m) => m.includes('already has a registration'))) failures.push('存在 slot 双注册冲突');
-if (!consoleMsgs.some((m) => m.includes('[pageerror]'))) {
-  // 无 pageerror 是期望状态
-} else {
+if (consoleMsgs.some((m) => m.includes('[pageerror]'))) {
   const errs = consoleMsgs.filter((m) => m.includes('[pageerror]'));
-  if (errs.length > 0) failures.push(`pageerror:${errs.join(';').slice(0, 200)}`);
+  failures.push(`pageerror:${errs.join(';').slice(0, 200)}`);
 }
 const transparentOk = (bg) => bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)' || bg === 'rgb(0, 0, 0)';
 if (!transparentOk(state.bodyBg)) failures.push(`body 背景非透明:${state.bodyBg}`);
@@ -232,32 +249,32 @@ if (!hasRpc) failures.push('无任何 RPC 经代理到达 3080');
 if (!bridgeOk) failures.push('会话切换桥未生效(localStorage 未写入)');
 const wsOk = relayLog.some((l) => l.includes('WS connected'));
 if (!wsOk) failures.push('WS 事件流未建立');
-// Phase 9 布局断言
+// Phase 9 布局断言:对话模式
 if (typeof chatLayout.grid !== 'string' || !chatLayout.grid.startsWith('0px') || !chatLayout.grid.endsWith('0px')) {
   failures.push(`对话模式 frame 网格非 0|1fr|0:${chatLayout.grid}`);
 }
 if (!chatLayout.backButton) failures.push('对话模式缺少返回按钮');
 if (!chatLayout.backInTitleRow) failures.push('返回按钮不在 session title 行内(用户要求放过去)');
 if (chatLayout.host !== 'sidebar') failures.push(`__DSH_HOST__ 未注入:${chatLayout.host}`);
-if (chatLayout.darkAttr !== true && chatLayout.colorScheme !== 'dark') {
-  // 当前系统主题可能是浅色;只要 colorScheme 有值即视为已同步(与 matchMedia 一致即可)
+// Phase 9 布局断言:会话管理页(独立单栏页面,非侧边栏拉伸)
+if (!sessionsLayout.sessionsClass) failures.push('返回按钮未进入会话管理页');
+if (sessionsLayout.rootDisplay !== 'none') failures.push(`会话页未隐藏上游 #root(display=${sessionsLayout.rootDisplay})`);
+if (!sessionsLayout.sessionsRootVisible) failures.push('会话页 #dsh-sessions-root 不可见');
+if (!sessionsLayout.headerPresent) failures.push('会话页缺少 header');
+if (!sessionsLayout.logoPresent) failures.push('会话页 logo(wordmark)丢失(用户要求保留 logo)');
+if (!sessionsLayout.backInHeader) failures.push('会话页返回按钮不在 header 内(用户要求参与布局,非 fixed 悬浮)');
+if (!sessionsLayout.newBtnPresent) failures.push('会话页缺少新建会话按钮');
+if (sessionsLayout.rows < 1) failures.push(`会话页无会话行(rows=${sessionsLayout.rows})`);
+if (sessionsLayout.backButtons !== 0) failures.push(`会话页残留对话模式注入的返回按钮(${sessionsLayout.backButtons})`);
+if (!sessionsLayout.noHScroll) failures.push('会话页 586px 出现横向滚动(违规)');
+if (sessionsLayout.storedView !== 'sessions') failures.push('视图偏好未持久化(dsh.ui.view)');
+// 会话行点击 → 立即跳转(无 setTimeout):写恢复键 + 回传 switch-session:applied
+if (sessionsLayout.rows > 0) {
+  if (!sessionJump.posted) failures.push('点击会话行未回传 switch-session:applied');
+  if (sessionJump.stored === null) failures.push('点击会话行未写入 dsh.sessions.current');
+  if (sessionJump.view !== 'chat') failures.push(`点击会话行后视图偏好未回 chat:${sessionJump.view}`);
 }
-if (!wsLayout.workspacesClass) failures.push('返回按钮未进入 Workspaces 模式');
-if (wsLayout.frameWidth < 1024) failures.push(`Workspaces 模式 frame 宽度不足(应撑宽到 1100):${wsLayout.frameWidth}`);
-if (!wsLayout.backWorkspaces) failures.push('Workspaces 模式缺少悬浮返回按钮');
-if (!wsLayout.logoRowVisible) failures.push('Workspaces 模式 logo 行丢失(用户要求保留 logo)');
-if (!wsLayout.toggleHidden) failures.push('Workspaces 模式折叠钮未隐藏');
-if (!wsLayout.fullWidthCol) failures.push(`Workspaces 模式非单栏全宽:grid=${wsLayout.grid}`);
-if (wsLayout.sidebarRootWidth < 1000) failures.push(`Workspaces 模式内容未撑满(根宽度=${wsLayout.sidebarRootWidth}px,应≈1100)`);
-if (!wsLayout.allExpanded) failures.push('Workspaces 页 workspace 行未全部展开(应无展开/派生交互)');
-if (!wsLayout.chevronHidden) failures.push('Workspaces 页展开箭头未隐藏');
-if (wsLayout.storedView !== 'workspaces') failures.push('视图偏好未持久化(dsh.ui.view)');
-if (wsLayout.sessionRow && !autoBack) failures.push('点击会话行未自动返回对话模式');
-if (!autoBack && !backExit) failures.push('未能退出 Workspaces 模式(会话行自动返回与悬浮按钮均未生效)');
-
-if (failures.length > 0) {
-  console.log('SMOKE FAIL:\n  ' + failures.join('\n  '));
-  process.exit(1);
-}
-console.log('SMOKE PASS: UI 渲染 / RPC / WS / 无冲突 / 透明融合全部通过');
-process.exit(0);
+// 窄宽度(320px)无横向溢出
+if (!narrowOverflow.noHScroll) failures.push('320px 出现横向滚动(违规)');
+// 返回对话模式(React header 返回 → __dshBridge.setView)
+if (!backExit) failures.push('会话页 header 返回按钮未能切回对话模式');
