@@ -69,27 +69,49 @@ async function askAndStream(
 }
 
 export function registerChatParticipant(ctx: AppContext): vscode.Disposable {
-  const participant = vscode.chat.createChatParticipant('deepseekHarness.agent', async (request, _context, stream, token) => {
-    const text = typeof request.prompt === 'string' ? request.prompt.trim() : '';
-    if (text === '') {
-      stream.markdown('请在 VS Code Chat 中输入问题(如 "总结本仓库结构")。');
-      return;
-    }
-    try {
-      await ctx.runtime.connect();
-      let sessionId = ctx.activeSessionId.value;
-      if (!sessionId) {
-        sessionId = await ctx.sessions.create();
-        ctx.activeSessionId.value = sessionId;
+  const participant = vscode.chat.createChatParticipant(
+    'deepseekHarness.agent',
+    async (request, _context, stream, token): Promise<vscode.ChatResult> => {
+      const text = typeof request.prompt === 'string' ? request.prompt.trim() : '';
+      const forceNew = request.command === 'new';
+      if (text === '' && !forceNew) {
+        stream.markdown('请在 VS Code Chat 中输入问题(如 "总结本仓库结构");支持斜杠命令 /new 新建会话。');
+        return {};
       }
-      ctx.controller.setActiveSession(sessionId);
-      await ctx.sessions.seedHistory(sessionId);
-      await askAndStream(ctx, sessionId, text, stream, token);
-      stream.markdown(''); // 收尾占位(保持 chat 气泡结束)
-    } catch (error) {
-      stream.markdown(`**DeepSeek Harness 出错**:${error instanceof Error ? error.message : String(error)}`);
-    }
-  });
+      try {
+        await ctx.runtime.connect();
+        let sessionId = ctx.activeSessionId.value;
+        if (!sessionId || forceNew) {
+          // 新建会话用 VS Code 工作区目录(工作区自动关联,对齐 newSession 命令)
+          const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+          sessionId = await ctx.sessions.create(wsPath);
+          ctx.activeSessionId.value = sessionId;
+          if (forceNew) {
+            stream.markdown(`*(已新建会话,工作区:${wsPath ?? '实例默认 cwd'})*`);
+          }
+        }
+        ctx.controller.setActiveSession(sessionId);
+        await ctx.sessions.seedHistory(sessionId);
+        if (text !== '') {
+          await askAndStream(ctx, sessionId, text, stream, token);
+          stream.markdown(''); // 收尾占位(保持 chat 气泡结束)
+        }
+        return { metadata: { command: request.command } };
+      } catch (error) {
+        stream.markdown(`**DeepSeek Harness 出错**:${error instanceof Error ? error.message : String(error)}`);
+        return {};
+      }
+    },
+  );
   participant.iconPath = vscode.Uri.joinPath(ctx.extensionUri, 'media', 'deepseek.svg');
+  // followup 建议(官方 chat-sample 模式):一轮结束后提供继续/新建会话
+  participant.followupProvider = {
+    provideFollowups(_result, _context, _token): vscode.ChatFollowup[] {
+      return [
+        { prompt: '继续', label: '继续当前任务' },
+        { prompt: '', command: 'new', label: '新建会话(当前工作区)' },
+      ];
+    },
+  };
   return participant;
 }

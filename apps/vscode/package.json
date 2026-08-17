@@ -127,7 +127,13 @@
         "name": "DeepSeekHarness",
         "fullName": "DeepSeek Harness",
         "description": "DeepSeek Harness agent(模型与工具由 dsh 实例提供)",
-        "isSticky": true
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "new",
+            "description": "新建会话(当前 VS Code 工作区)"
+          }
+        ]
       }
     ],
     "viewsContainers": {
