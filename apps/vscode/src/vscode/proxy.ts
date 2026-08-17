@@ -21,6 +21,8 @@ import { once } from 'node:events';
 export class HttpProxy {
   private server?: http.Server;
   private target: URL;
+  /** 请求日志回调(扩展侧写入诊断文件,排查 webview 的 RPC 是否到达/成功) */
+  onRequestLog?: (entry: { method: string; path: string; status: number; at: number }) => void;
 
   constructor(targetBase: string) {
     this.target = new URL(targetBase);
@@ -96,6 +98,7 @@ export class HttpProxy {
       headers,
     });
     upstream.on('response', (upstreamRes) => {
+      this.onRequestLog?.({ method: req.method ?? 'GET', path: req.url ?? '/', status: upstreamRes.statusCode ?? 502, at: Date.now() });
       const outHeaders = { ...upstreamRes.headers, ...corsHeaders() };
       res.writeHead(upstreamRes.statusCode ?? 502, outHeaders);
       upstreamRes.pipe(res);

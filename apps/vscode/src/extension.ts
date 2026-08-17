@@ -822,6 +822,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // 自动化冒烟钩子:DSH_SMOKE_OPEN=1 时激活后自动打开聊天面板(视觉冒烟/CI 用)
+  // 代理请求日志(诊断:webview 的 settings.describe 等 RPC 是否到达且成功)
+  proxy.onRequestLog = (entry) => {
+    if (entry.path.startsWith('/api/settings.describe') || entry.path.startsWith('/api/host.describe') || entry.path.startsWith('/api/events.')) {
+      appendDiagLog({ evt: 'proxy-req', ...entry });
+    }
+  };
+
   if (process.env.DSH_SMOKE_OPEN === '1') {
     setTimeout(() => {
       void vscode.commands.executeCommand('deepseekHarness.open');
