@@ -112,7 +112,9 @@ const EXCLUDE_PLUGINS = new Set([
   'dsh-client-ui-settings-plugin-inventory',
   'dsh-client-ui-settings-plugins',
   'dsh-client-ui-directory-picker-native',
-  'dsh-client-ui-workspace',
+  // ui-workspace 保留:WorkspacePicker/WorkspaceBrowser 是输入框工作区选择
+  // 与会话工作区显示的依赖(裁剪会导致"选择工作区"无效、切换后工作区不加载);
+  // "自动关联 VS Code 工作区"由扩展层 ensureWorkspace + newSession 实现
   // 会话列表栏:移出 webview,由 VS Code 原生 tree view 接管(用户确认的架构)
   'dsh-client-ui-sidebar',
   // 依赖 ui-sidebar 且非核心(cordis 管理界面)
