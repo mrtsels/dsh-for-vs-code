@@ -165,11 +165,14 @@ async function main() {
   }
   entries.sort((a, b) => a.id.localeCompare(b.id));
 
-  // 3. 图 rev + boot.js
+  // 3. 图 rev + boot.js;index.html 静态注入 boot 脚本(首个 head 脚本,
+  // 先于模块脚本执行;与上游 injectBootManifest 同构,产物自包含)
   const graphRev = shortHash(entries.map((e) => e.rev).join('|'));
   const graph = { rev: graphRev, entries };
   const bootJs = `window.__DSH_BOOT__ = ${JSON.stringify(graph).replaceAll('<', '\\u003c')};\n`;
   writeFileSync(join(dest, 'boot.js'), bootJs);
+  html = html.replace(/<head>/i, '<head><script src="./boot.js"></script>');
+  writeFileSync(shellHtml, html);
 
   // 4. 与 rc.6 抓取图集合核对(存在才比对)
   const ref = referenceGraph();

@@ -93,15 +93,18 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 - [x] P5-3 构建:vendor 内 `pnpm run build:lib:client` + `pnpm run build:web`;验证各 client 包
       `lib/client.js` 与 `apps/web/dist` 产出(**实测:rc.5 源码构建产物与 rc.6 抓取产物字节级一致**)
 - [x] P5-4 装配脚本 `build-web-shell.mjs`:拷贝 + 静态组图(与 rc.6 抓取图核对,39 插件零缺失)+
-      index.html + resolveBase 断言式替换 → 产出 `dist/web/dsh-shell/`(静态冒烟 200)
-- [ ] P5-5 面板接线:chat-panel.ts 指向 dsh-shell(**接线已完成**);冒烟:侧边栏完整 UI、会话列表、
-      工作区选择、聊天流式(**视觉冒烟待 F5/启动扩展.command 确认**)
+      index.html(静态注入 boot 脚本)+ resolveBase 断言式替换 → 产出 `dist/web/dsh-shell/`
+- [ ] P5-5 面板接线:chat-panel.ts 指向 dsh-shell(**接线完成**);headless E2E(`scripts/smoke-shell.mjs`,
+      Chrome + Origin 中继)通过:UI 渲染真实会话/工作区/模型/权限,RPC 经代理全通;
+      **VS Code 内视觉冒烟待 F5/启动扩展.command 确认**(已自动开一窗口,见 DSH_SMOKE_OPEN 钩子)
 - [ ] P5-6 G0 四门 + 提交(脚本 + 接线 + 文档)
 
 ### Phase 6:定制适配(侧边栏形态)
 
 - [ ] P6-1 定制 boot 图:插件子集(排除 ui-settings*/plan/deliverables/workflow-run/
-      agent-preset/permission-presets 等,对照 refactor-requirements R-A2 的 EXCLUDE 12)
+      agent-preset/permission-presets、**ui-directory-picker-browse/native(实测全量图有
+      conversation.hero.workspace.directoryFlow 双注册冲突)** 等,对照 refactor-requirements
+      R-A2 的 EXCLUDE 12)
 - [ ] P6-2 侧边栏适配:ui-layout narrow-viewport 折叠链验证;自有 CSS 替代
       transparentPageChrome DOM 启发式(静态样式表,不做运行时 DOM 遍历)
 - [ ] P6-3 主题对齐:基础样式表用 VS Code 变量(背景透明等),静态 CSS

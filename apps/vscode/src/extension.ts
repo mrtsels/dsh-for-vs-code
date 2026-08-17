@@ -652,6 +652,13 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // 自动化冒烟钩子:DSH_SMOKE_OPEN=1 时激活后自动打开聊天面板(视觉冒烟/CI 用)
+  if (process.env.DSH_SMOKE_OPEN === '1') {
+    setTimeout(() => {
+      void vscode.commands.executeCommand('deepseekHarness.open');
+    }, 1500);
+  }
+
   logger.info(`DeepSeek Harness 已激活(baseUrl=${baseUrl},workspace=${workspaceRoot || '(无)'})`);
 }
 
