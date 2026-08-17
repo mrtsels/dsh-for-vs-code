@@ -11,7 +11,7 @@ import { ChangesPanel, toChangeItems } from './webview/changes-panel.js';
 import { ChatPanel } from './webview/chat-panel.js';
 import { readAgentPresetRoster, registerSettingsBridge } from './settings-bridge.js';
 import { ensureFolderSession } from './sessions/bootstrap.js';
-import { postRpc } from './rpc.js';
+import { listSessions, postRpc } from './rpc.js';
 import { SnapshotWatcher } from './vscode/workspace.js';
 import { WorkspaceChangeDecorationProvider } from './vscode/workspace-decoration.js';
 import { HttpProxy } from './vscode/proxy.js';
@@ -291,6 +291,19 @@ export function activate(context: vscode.ExtensionContext): void {
         await refreshSessionList();
         break;
       }
+      // 会话管理页点 workspace 行/其 + 按钮 → 跳转到该 workspace(跳转非派生)
+      case 'dsh:open-workspace': {
+        const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
+        try {
+          const sessionId = await openWorkspaceSession(current, request.title, request.newSession === true);
+          if (sessionId === undefined) throw new Error('工作区不可达或实例未就绪');
+          await context.globalState.update('dsh.initialSessionId', sessionId);
+          chatPanel.post({ type: 'dsh:bootstrap-session', sessionId });
+        } catch (error) {
+          chatPanel.post({ type: 'error', message: `打开工作区失败:${error instanceof Error ? error.message : String(error)}` });
+        }
+        break;
+      }
       case 'meta:jobs':
         chatPanel.post({ type: 'meta:jobs', sessionId: request.sessionId, jobs: sessions.jobs(request.sessionId) });
         break;
@@ -552,6 +565,29 @@ export function activate(context: vscode.ExtensionContext): void {
     const sessionId = (body?.result?.value as { sessionId?: string } | undefined)?.sessionId;
     return typeof sessionId === 'string' ? sessionId : undefined;
   };
+  // 会话管理页"打开 workspace":按标题匹配 workspace → 复用其空白会话,否则最近会话;
+  // + 按钮(newSession)强制复用空白或新建。返回目标会话 id(undefined = 失败)。
+  const openWorkspaceSession = async (current: string, title: string, newSession: boolean): Promise<string | undefined> => {
+    const wsList = await postRpc(current, 'workspace.list', {});
+    const items = (wsList?.result?.value as
+      | { items?: Array<{ workspaceId: string; title?: string; sessionIds?: string[] }> }
+      | undefined)?.items;
+    const ws = items?.find((w) => w.title === title);
+    if (ws === undefined) return undefined;
+    const sessions = await listSessions(current).catch(() => []);
+    const memberIds = new Set(ws.sessionIds ?? []);
+    const wsSessions = sessions
+      .filter((s) => memberIds.has(s.sessionId))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const blank = wsSessions.find((s) => s.blank)?.sessionId;
+    if (blank !== undefined) return blank;
+    const recent = wsSessions[0];
+    if (!newSession && recent !== undefined) return recent.sessionId;
+    const created = await postRpc(current, 'session.create', { workspaceId: ws.workspaceId });
+    const sessionId = (created?.result?.value as { sessionId?: string } | undefined)?.sessionId;
+    return typeof sessionId === 'string' ? sessionId : undefined;
+  };
+
   // 语言强制对齐:读实例 locale.preference,与目标不一致则 settings.update 写回
   const syncLocaleToInstance = async (current: string, target: string): Promise<boolean> => {
     try {

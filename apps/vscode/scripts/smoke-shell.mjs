@@ -180,6 +180,14 @@ const wsLayout = await page.evaluate(() => {
       return parts.length === 3 && parts[0] !== '0px' && parts[1] === '0px' && parts[2] === '0px';
     })(),
     sessionRow: document.querySelector('[class$="_sessionRow"]') !== null,
+    allExpanded: (() => {
+      const rows = [...document.querySelectorAll('[class$="_projectRow"]')];
+      return rows.length > 0 && rows.every((r) => r.getAttribute('aria-expanded') === 'true');
+    })(),
+    chevronHidden: (() => {
+      const c = document.querySelector('[class$="_chevron"]');
+      return c === null || getComputedStyle(c).display === 'none';
+    })(),
     storedView: localStorage.getItem('dsh.ui.view'),
     sidebarRootWidth: (() => {
       const rootEl = document.querySelector('[class$="_sidebarCol"] [class*="_root "]');
@@ -241,6 +249,8 @@ if (!wsLayout.logoRowVisible) failures.push('Workspaces 模式 logo 行丢失(�
 if (!wsLayout.toggleHidden) failures.push('Workspaces 模式折叠钮未隐藏');
 if (!wsLayout.fullWidthCol) failures.push(`Workspaces 模式非单栏全宽:grid=${wsLayout.grid}`);
 if (wsLayout.sidebarRootWidth < 1000) failures.push(`Workspaces 模式内容未撑满(根宽度=${wsLayout.sidebarRootWidth}px,应≈1100)`);
+if (!wsLayout.allExpanded) failures.push('Workspaces 页 workspace 行未全部展开(应无展开/派生交互)');
+if (!wsLayout.chevronHidden) failures.push('Workspaces 页展开箭头未隐藏');
 if (wsLayout.storedView !== 'workspaces') failures.push('视图偏好未持久化(dsh.ui.view)');
 if (wsLayout.sessionRow && !autoBack) failures.push('点击会话行未自动返回对话模式');
 if (!autoBack && !backExit) failures.push('未能退出 Workspaces 模式(会话行自动返回与悬浮按钮均未生效)');

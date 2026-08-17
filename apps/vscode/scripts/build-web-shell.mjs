@@ -277,6 +277,8 @@ body.dsh-workspaces [class$="_frame"] { grid-template-columns: minmax(0, 1fr) 0p
 body.dsh-workspaces [class$="_sidebarCol"] [class*="_root "] { width: 100% !important; }
 body.dsh-workspaces [class$="_logoRow"] { padding-left: 40px !important; }
 body.dsh-workspaces [class$="_toggle"] { display: none !important; }
+/* 会话管理页无展开/折叠派生交互:隐藏 workspace 行展开箭头(默认全部展开) */
+body.dsh-workspaces [class$="_chevron"] { display: none !important; }
 
 /* ---- 会话切换按钮:对话模式插入 session title 行内(与面包屑同行);
        空会话 hero 与 Workspaces 页用 fixed 悬浮(左上角) ---- */
@@ -389,6 +391,7 @@ const BRIDGE_JS = `(() => {
     document.body.classList.toggle('dsh-workspaces', view === 'workspaces');
     try { localStorage.setItem(VIEW_KEY, view); } catch (err) {}
     ensureBackButton();
+    if (view === 'workspaces') window.setTimeout(expandAllWorkspaces, 250);
   };
   const ensureBackButton = () => {
     document.querySelectorAll('.dsh-back-button').forEach((n) => n.remove());
@@ -434,10 +437,25 @@ const BRIDGE_JS = `(() => {
       }
     });
   };
-  // 点击委托(document capture):
-  // 1) 顶部"新会话"按钮/logo wordmark(上游 startSession 落在最近 workspace,不含 VS Code
-  //    目录)→ 拦截,改由扩展用 VS Code 当前目录创建/复用会话(ensureFolderSession);
-  // 2) 会话切换按钮 → 切换视图;3) workspaces 页点会话行 → 返回对话。
+  // 点击委托(document capture):会话管理页全部交互 = 页面跳转(非派生)。
+  // 1) 顶部"新会话"/logo wordmark → 扩展按 VS Code 目录建会话(跳转);
+  // 2) 会话切换按钮 → 切换视图;3) 会话行 → 打开该会话并返回对话(跳转);
+  // 4) workspace 行(主体/+ 按钮)→ 跳转到该 workspace(复用 blank/最近会话或新建);
+  //    ... 管理菜单按钮保留(重命名/删除);初始化展开期间的自动点击不拦截。
+  let expanding = false;
+  const expandAllWorkspaces = () => {
+    if (expanding) return;
+    expanding = true;
+    const rows = [...document.querySelectorAll('[class$="_projectRow"]')];
+    for (const row of rows) {
+      if (row.getAttribute('aria-expanded') !== 'true') row.click();
+    }
+    window.setTimeout(() => { expanding = false; }, 80);
+  };
+  const ensureExpanded = () => {
+    if (!document.body.classList.contains('dsh-workspaces')) return;
+    expandAllWorkspaces();
+  };
   document.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -455,11 +473,29 @@ const BRIDGE_JS = `(() => {
       setView(document.body.classList.contains('dsh-workspaces') ? 'chat' : 'workspaces');
       return;
     }
-    if (!document.body.classList.contains('dsh-workspaces')) return;
+    if (!document.body.classList.contains('dsh-workspaces') || expanding) return;
     const sessionRow = target.closest('[class$="_sessionRow"]');
     if (sessionRow !== null) {
       // 延迟略长:给上游打开会话(open/connect)留时间,退出后对话页即显示目标会话
       window.setTimeout(() => { setView('chat'); }, 400);
+      return;
+    }
+    // workspace 行:跳转(该 workspace 复用 blank/最近会话,或 + 按钮强制新建)
+    const projectRow = target.closest('[class$="_projectRow"]');
+    if (projectRow !== null) {
+      const titleEl = projectRow.querySelector('[class$="_title"]');
+      const title = (titleEl?.textContent ?? '').trim();
+      if (title === '') return;
+      const rowActions = projectRow.querySelector('[class$="_rowActions"]');
+      const buttons = rowActions === null ? [] : [...rowActions.querySelectorAll('button')];
+      const plusBtn = buttons.length > 0 ? buttons[buttons.length - 1] : null;
+      const clickedButton = target.closest('button');
+      if (clickedButton !== null && clickedButton !== plusBtn) return; // ... 管理菜单保留
+      event.stopPropagation();
+      event.preventDefault();
+      try { localStorage.setItem(VIEW_KEY, 'chat'); } catch (err) {}
+      window.parent.postMessage({ type: 'dsh:open-workspace', title, newSession: clickedButton !== null }, '*');
+      return;
     }
   }, true);
   // 应用渲染后接管:轮询等 root 就绪 → 恢复视图偏好 → 持续观察 title 行子节点变化
@@ -475,7 +511,10 @@ const BRIDGE_JS = `(() => {
         // 语言对齐:等 connection 就绪后执行(延迟 2s)
         window.setTimeout(syncLocale, 2000);
         if (typeof MutationObserver !== 'undefined') {
-          const observer = new MutationObserver(scheduleReinsert);
+          const observer = new MutationObserver(() => {
+            scheduleReinsert();
+            ensureExpanded();
+          });
           observer.observe(document.body, { childList: true, subtree: true });
         }
       }
