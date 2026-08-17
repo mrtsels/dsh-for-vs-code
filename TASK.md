@@ -117,12 +117,11 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 
 - [ ] P7-1 全功能回归:会话新建/切换/fork、聊天流式、工具调用、审批、subagent 打断、
       goals、jobs、改动审查(自研面板仍工作)
-- [ ] P7-2 自研 UI 清理:`web/*`(App.tsx、ChatView、SessionList、InsightsTabs、StatusBar、
-      bridge-client、main.tsx)移除;fetch-dsh-ui.mjs 退役(连同 AGENTS.md 对应坑条目);
-      bridge.ts 按需保留(changes 面板)
-- [ ] P7-3 文档同步:AGENTS.md(UI 红线修订)、README(架构图/当前状态)、docs/gaps.md、
-      docs/http-bridge.md(如有变化)
-- [ ] P7-4 G0 + 手动测试清单 docs/manual-tests/phase-5.md
+- [x] P7-2 自研 UI 清理:web/* 聊天 UI 9 文件 + panel.ts + display.test.ts + fetch-dsh-ui.mjs 移除
+      (build.mjs 仅剩 extension+changes 两入口;G0 49 tests 绿);bridge.ts 保留(changes 面板)
+- [x] P7-3 文档同步:AGENTS.md(Route A 重写:红线/工具链/Pitfalls)、README(状态/架构/安装)、
+      docs/gaps.md(Route A 实测发现)、docs/versions.md(vendor rev);http-bridge 协议未变
+- [x] P7-4 G0 四门绿 + 手动测试清单 docs/manual-tests/phase-5.md 落盘(待用户逐项执行)
 
 ### Phase 8:交付门
 

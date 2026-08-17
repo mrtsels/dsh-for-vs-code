@@ -1,8 +1,8 @@
 /**
- * esbuild 双入口构建:
+ * esbuild 构建:
  *   1. src/extension.ts  → dist/extension.js   (extension host, node, ESM, external vscode)
- *   2. web/main.tsx      → dist/web/index.js   (webview, browser, iife, react 打包进 bundle)
- * 并生成 dist/web/index.html 骨架(CSP 由 panel 运行时注入 nonce)。
+ *   2. web/changes-main.tsx → dist/web/changes.js (改动审查面板 webview)
+ * 主 UI = dist/web/dsh-shell(上游源码构建产物,由 build-web-shell.mjs 装配)。
  * --watch 开发模式。
  */
 import { build } from 'esbuild';
@@ -23,20 +23,6 @@ const extension = {
   target: 'node22',
   sourcemap: true,
   external: ['vscode'],
-  logLevel: 'info',
-};
-
-/** @type {import('esbuild').BuildOptions} */
-const webview = {
-  entryPoints: [resolve(app, 'web/main.tsx')],
-  outfile: resolve(app, 'dist/web/index.js'),
-  bundle: true,
-  platform: 'browser',
-  format: 'iife',
-  target: 'es2022',
-  jsx: 'automatic',
-  sourcemap: true,
-  define: { 'process.env.NODE_ENV': '"production"' },
   logLevel: 'info',
 };
 
@@ -73,17 +59,16 @@ const changesSkeleton = htmlSkeleton.replace('./index.js', './changes.js').repla
 
 async function main() {
   mkdirSync(resolve(app, 'dist/web'), { recursive: true });
-  writeFileSync(resolve(app, 'dist/web/index.html'), htmlSkeleton);
   writeFileSync(resolve(app, 'dist/web/changes.html'), changesSkeleton);
   if (watch) {
-    for (const options of [extension, webview, changes]) {
+    for (const options of [extension, changes]) {
       const ctx = await buildContext(options);
       await ctx.watch();
     }
     console.log('[watch] watching… (Ctrl+C 退出)');
   } else {
-    await Promise.all([build(extension), build(webview), build(changes)]);
-    console.log('dist/extension.js + dist/web/index.js + dist/web/changes.js 构建完成');
+    await Promise.all([build(extension), build(changes)]);
+    console.log('dist/extension.js + dist/web/changes.js 构建完成');
   }
 }
 
