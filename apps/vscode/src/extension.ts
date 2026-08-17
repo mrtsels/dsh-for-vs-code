@@ -296,6 +296,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         await refreshSessionList();
         break;
       }
+      // 上游 console 日志(accept/adopt 诊断注入)→ 写诊断文件
+      case 'dsh:console': {
+        appendDiagLog({ evt: 'console:' + String(request.kind), text: String(request.text), at: Date.now() });
+        break;
+      }
       // UI 语言与设置不符 → 重载 webview(boot 初始读取连接就绪后可靠;30s 防抖防循环)
       case 'dsh:locale-mismatch': {
         const now = Date.now();

@@ -35,6 +35,8 @@ export type WebviewRequest =
   | { type: 'dsh:diag'; payload: Record<string, unknown> }
   // UI 语言与 VS Code 设置不符(boot 初始读取失败/推送丢失)→ 请扩展重载 webview
   | { type: 'dsh:locale-mismatch' }
+  // 上游 accept/adopt 注入日志转发(诊断)
+  | { type: 'dsh:console'; kind: string; text: string }
   // 内部调试通道:webview 内 error/unhandledrejection 转发(不入 validateWebviewRequest 白名单,
   // 仅 ChatViewProvider 内部消费,不发给业务 handler)
   | { type: 'debug'; kind: 'error' | 'rejection'; message: string };

@@ -105,6 +105,25 @@ function patchResolveBase(clientJsPath) {
   writeFileSync(clientJsPath, body);
 }
 
+/** setLocale 桥接缝:locale bundle 的 apply 里暴露 window.__dshSetLocale(id)。
+ * 断言式:期望的锚点(LocaleRuntime 构造)缺失即失败。 */
+function patchSetLocaleBridge(clientJsPath) {
+  let body = readFileSync(clientJsPath, 'utf8');
+  const anchors = ['new LocaleRuntime(', 'LocaleRuntime(ctx'];
+  const anchor = anchors.find((a) => body.includes(a));
+  if (anchor === undefined) {
+    throw new Error(
+      'setLocale 桥接缝失配:' + clientJsPath + ' 未找到 LocaleRuntime 构造锚点(',
+      + '升级专项时同步更新本脚本。)',
+    );
+  }
+  const inj = ';if(typeof window!==\'undefined\'){window.__dshSetLocale=(id)=>{try{return ctx.locale.setLocale(id)}catch(e){return e instanceof Error?e.message:String(e)}};}';
+  const at = body.indexOf(';', body.indexOf(anchor));
+  if (at === -1) throw new Error('setLocale 桥接缝失配:' + clientJsPath + ' 锚点后无分号');
+  body = body.slice(0, at + 1) + inj + body.slice(at + 1);
+  writeFileSync(clientJsPath, body);
+}
+
 /** 裁剪:排除纯叶子 UI 插件(设置/计划/交付物/工作流/agent-preset/权限预设/目录选择),
  * 由 VS Code 原生 UI 接管;会话区+输入面保留。短 id(去掉 @deepseek-ai/ 前缀)。 */
 const EXCLUDE_PLUGINS = new Set([
@@ -351,6 +370,19 @@ const BRIDGE_JS = `(() => {
     }
     try { window.parent.postMessage(message, '*'); } catch (err) {}
   };
+  // 诊断:捕获上游 console(accept/adopt 注入日志)→ 回传扩展写文件
+  const origLog = console.log.bind(console);
+  const origError = console.error.bind(console);
+  const forwardConsole = (kind, args) => {
+    try {
+      const text = args.map((a) => typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch { return String(a); } })()).join(' ');
+      if (text.includes('[dsh-settings]') || text.includes('[dsh-locale]') || text.includes('dropping malformed')) {
+        postToHost({ type: 'dsh:console', kind, text: text.slice(0, 500) });
+      }
+    } catch (err) {}
+  };
+  console.log = (...args) => { forwardConsole('log', args); origLog(...args); };
+  console.error = (...args) => { forwardConsole('error', args); origError(...args); };
   // 会话气泡 icon(用户要求:不用箭头;空心底,不实心)
   const SESSIONS_ICON = '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M2 2.75A1.75 1.75 0 0 1 3.75 1h8.5A1.75 1.75 0 0 1 14 2.75v5.5A1.75 1.75 0 0 1 12.25 10H8.1l-3.5 3.1a.6.6 0 0 1-1-.46V10H3.75A1.75 1.75 0 0 1 2 8.25v-5.5Z"/></svg>';
 
@@ -518,8 +550,15 @@ const BRIDGE_JS = `(() => {
         let view = 'chat';
         try { view = localStorage.getItem(VIEW_KEY) === 'workspaces' ? 'workspaces' : 'chat'; } catch (err) {}
         setView(view);
-        // 语言对齐:等 connection 就绪后执行(延迟 2s;之后周期重试)
-        window.setTimeout(syncLocale, 2000);
+        // 语言对齐:boot 后 2s 立即尝试一次(优先 setLocale 桥),之后周期检测
+        window.setTimeout(() => {
+          const target = window.__DSH_LOCALE__;
+          if (target !== 'zh' && target !== 'en') return;
+          try {
+            if (typeof window.__dshSetLocale === 'function') window.__dshSetLocale(target);
+            else syncLocale();
+          } catch (err) { console.error('[dsh-bridge] locale:', String(err)); }
+        }, 2000);
         if (typeof MutationObserver !== 'undefined') {
           const observer = new MutationObserver(() => {
             scheduleReinsert();
@@ -540,10 +579,17 @@ const BRIDGE_JS = `(() => {
   // (navigator.language),且实例值已等于目标时无推送可触发 → 用"双写对调值再写回"
   // 强制推送;UI 语言已正确(检测 tab 文本)则跳过,避免无谓闪动。
   const detectUiLocale = () => {
-    const tabs = document.querySelectorAll('[class$="_tab"]');
-    const text = [...tabs].map((t) => t.textContent ?? '').join(' ');
-    if (text.includes('对话') || text.includes('轨迹')) return 'zh';
-    if (text.includes('Chat') || text.includes('Trajectory')) return 'en';
+    // 1) 会话视图:tab 文本最精确(纯 UI 词,不受会话内容污染)
+    const tabs = [...document.querySelectorAll('[class$="_tab"]')];
+    const tabText = tabs.map((t) => t.textContent ?? '').join(' ');
+    if (tabText.includes('对话') || tabText.includes('轨迹')) return 'zh';
+    if (tabText.includes('Chat') || tabText.includes('Trajectory')) return 'en';
+    // 2) hero(空会话无 tab):用 hero/输入占位词条(避开会话内容)
+    const rootText = document.getElementById('root')?.textContent ?? '';
+    const zhMarks = ['探索未至之境', '给智能体发消息', '选择一个工作区'];
+    const enMarks = ['Into the Unknown', 'Describe what you want to build', 'Choose a workspace'];
+    for (const mark of zhMarks) if (rootText.includes(mark)) return 'zh';
+    for (const mark of enMarks) if (rootText.includes(mark)) return 'en';
     return undefined;
   };
   const updateLocale = (base, envelope, value) =>
@@ -607,18 +653,26 @@ const BRIDGE_JS = `(() => {
     }
     syncLocale();
   }, 5000);
-  // 语言硬切换兜底:boot 后 3s 与 8s 各检测一次,UI 语言仍与设置不符 → 请扩展重载
-  // webview(boot 时代理已就绪 → 上游初始 settings 读取成功)。最多 2 次,扩展侧 30s 防抖。
-  let reloadRequests = 0;
-  const requestLocaleReload = () => {
+  // 语言硬切换主通道:直接驱动上游 setLocale(官方公共方法:立即切 UI + 写回实例),
+  // 绕过 settings 快照/推送链(该链在 webview 环境实测不可靠)。周期检测 UI 语言,
+  // 不符则调用,直到一致或达上限。
+  let localeChecks = 0;
+  const localeCheckTimer = window.setInterval(() => {
     const target = window.__DSH_LOCALE__;
-    if (target !== 'zh' && target !== 'en') return;
-    if (detectUiLocale() === target || reloadRequests >= 2) return;
-    reloadRequests += 1;
-    postToHost({ type: 'dsh:locale-mismatch' });
-  };
-  window.setTimeout(requestLocaleReload, 3000);
-  window.setTimeout(requestLocaleReload, 8000);
+    if (target !== 'zh' && target !== 'en') { window.clearInterval(localeCheckTimer); return; }
+    if (detectUiLocale() === target || localeChecks >= 10) { window.clearInterval(localeCheckTimer); return; }
+    localeChecks += 1;
+    try {
+      if (typeof window.__dshSetLocale === 'function') {
+        const result = window.__dshSetLocale(target);
+        if (typeof result === 'string') console.error('[dsh-bridge] setLocale:', result);
+      } else {
+        syncLocale(); // 兜底:无桥时走写实例+推送
+      }
+    } catch (err) {
+      console.error('[dsh-bridge] setLocale:', String(err));
+    }
+  }, 3000);
 
   // 5b. 自动诊断:应用 boot 后与视图切换时采集 webview 布局/语言事实,
   // 回传扩展写入本地文件(.dsh-webview-diag.json),便于排查环境差异。
@@ -730,6 +784,11 @@ async function main() {
     writeFileSync(join(pluginDest, 'client.js'), content);
     if (id === '@deepseek-ai/dsh-client-connection') {
       patchResolveBase(join(pluginDest, 'client.js'));
+    }
+    // 适配缝 2:locale bundle 暴露 setLocale 桥 —— 语言硬切换通道(绕过 settings 快照/推送链,
+    // 该链在 webview 环境实测不可靠:boot 快照加载与运行中推送均不触发语言更新)
+    if (id === '@deepseek-ai/dsh-client-locale') {
+      patchSetLocaleBridge(join(pluginDest, 'client.js'));
     }
     entries.push({
       id,
