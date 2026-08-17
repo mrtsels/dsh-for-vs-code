@@ -646,6 +646,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const next = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', '');
         if (next !== '' && next !== runtime.currentBaseUrl) {
           runtime.rebase(next);
+          proxy.setTarget(next); // 代理端口不变,重定向转发目标(webview 无需重载)
           cwdWarned = false;
         }
       }

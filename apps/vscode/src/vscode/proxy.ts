@@ -20,7 +20,7 @@ import { once } from 'node:events';
 
 export class HttpProxy {
   private server?: http.Server;
-  private readonly target: URL;
+  private target: URL;
 
   constructor(targetBase: string) {
     this.target = new URL(targetBase);
@@ -31,6 +31,11 @@ export class HttpProxy {
     const addr = this.server?.address();
     if (addr === undefined || addr === null || typeof addr === 'string') return '';
     return `http://127.0.0.1:${addr.port}`;
+  }
+
+  /** 切换转发目标(实例地址变化;端口不变,后续请求走新目标)。 */
+  setTarget(targetBase: string): void {
+    this.target = new URL(targetBase);
   }
 
   async start(): Promise<string> {

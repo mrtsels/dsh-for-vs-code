@@ -7,6 +7,7 @@
  *
  *   dist/web/dsh-shell/
  *     index.html          上游 apps/web vite 产物,绝对路径改相对(无 manifest/favicon)
+ *     shell.css           侧边栏融合样式(静态,替代旧 DOM 启发式)
  *     assets/**           vite 构建产物(js/css/fonts/langs)
  *     plugins/<id>/client.js   各 client 包 lib/client.js(与上游 /plugins/<id>/client.js 同构)
  *     boot.js             window.__DSH_BOOT__ = {rev, entries[]}(静态组图,镜像上游
@@ -15,7 +16,12 @@
  * 唯一适配缝:connection bundle 的 resolveBase 三元表达式 → __DSH_WEB_URL__ 优先
  * (扩展侧代理地址,绕行 Origin 栅栏)。断言式替换:期望文本缺失即失败并提示更新缝。
  *
- * 用法:node scripts/build-web-shell.mjs [vendorRoot] [dest]
+ * 默认裁剪模式(Phase 6 定制 boot 图):排除叶子 UI 插件(由 VS Code 原生层接管),
+ * 并裁剪 inject 边(缺依赖会导致 loader 等待 → 插件永不激活);--full 保留全量图。
+ * 裁剪结果与 scripts/ref-graph-rc6.json(已验证的 rc.6 裁剪图)做集合断言。
+ * 同时写入 shell.css(侧边栏融合,静态样式,替代旧 DOM 启发式)并注入 index.html。
+ *
+ * 用法:node scripts/build-web-shell.mjs [vendorRoot] [dest] [--full]
  *   vendorRoot 默认 <repo>/vendor/deepseek-harness(构建产物须已就绪:
  *   build:lib:client + build:web)
  */
@@ -99,6 +105,34 @@ function patchResolveBase(clientJsPath) {
   writeFileSync(clientJsPath, body);
 }
 
+/** 裁剪:排除纯叶子 UI 插件(设置/计划/交付物/工作流/agent-preset/权限预设/目录选择),
+ * 由 VS Code 原生 UI 接管;会话区+输入面保留。短 id(去掉 @deepseek-ai/ 前缀)。 */
+const EXCLUDE_PLUGINS = new Set([
+  'dsh-client-ui-plan',
+  'dsh-client-ui-deliverables',
+  'dsh-client-ui-workflow-run',
+  'dsh-client-ui-agent-preset',
+  'dsh-client-ui-permission-presets',
+  'dsh-client-ui-settings-general',
+  'dsh-client-ui-settings-models',
+  'dsh-client-ui-settings-plugin-inventory',
+  'dsh-client-ui-settings-plugins',
+  'dsh-client-ui-directory-picker-native',
+  'dsh-client-ui-directory-picker-browse',
+  // ui-workspace/ui-sidebar 保留:工作区选择/显示依赖;自动关联由扩展层实现
+  // 注:browse 是 rc.5 源码多出的包(rc.6 服务端图没有),裁剪以对齐已验证的 28 集
+]);
+
+/** 侧边栏融合样式(静态;替代旧 transparentPageChrome DOM 启发式)。 */
+const SHELL_CSS = `/* dsh-shell 侧边栏融合(静态样式,构建产物,与 shell rev 绑定) */
+html, body, #root { background: transparent !important; }
+/* 布局 chrome(哈希类名后缀稳定:CSS modules 的 [hash]_[name]):框架/三列透出 VS Code 底色;
+   内容卡片(消息/输入框)保留自身表面色 */
+[class$="_frame"], [class$="_sidebarCol"], [class$="_centerCol"], [class$="_detailsCol"] { background: transparent !important; }
+`;
+
+const shortId = (id) => id.replace('@deepseek-ai/', '');
+
 /** 读取现存 rc.6 抓取图(如存在)用于集合核对。 */
 function referenceGraph() {
   const refBoot = join(dest, '..', 'dsh-plugins', 'boot.js');
@@ -165,25 +199,56 @@ async function main() {
   }
   entries.sort((a, b) => a.id.localeCompare(b.id));
 
-  // 3. 图 rev + boot.js;index.html 静态注入 boot 脚本(首个 head 脚本,
+  // 3. 裁剪(默认;--full 关闭):排除叶子插件 + 裁剪 inject 边 + 清除产物目录
+  const full = process.argv.includes('--full');
+  let graphEntries = entries;
+  if (!full) {
+    const excluded = entries.filter((e) => EXCLUDE_PLUGINS.has(shortId(e.id)));
+    const kept = entries.filter((e) => !EXCLUDE_PLUGINS.has(shortId(e.id)));
+    const keptIds = new Set(kept.map((e) => e.id));
+    graphEntries = kept.map((e) => {
+      const inject = (e.inject ?? []).filter((d) => keptIds.has(d));
+      return { ...e, ...(inject.length > 0 ? { inject } : {}) };
+    });
+    for (const e of excluded) {
+      rmSync(join(dest, 'plugins', ...e.id.split('/')), { recursive: true, force: true });
+    }
+    console.log(`boot 裁剪: ${entries.length} → ${graphEntries.length} 个插件`);
+  }
+
+  // 4. 图 rev + boot.js + shell.css;index.html 静态注入(首个 head 脚本,
   // 先于模块脚本执行;与上游 injectBootManifest 同构,产物自包含)
-  const graphRev = shortHash(entries.map((e) => e.rev).join('|'));
-  const graph = { rev: graphRev, entries };
+  writeFileSync(join(dest, 'shell.css'), SHELL_CSS);
+  const graphRev = shortHash(graphEntries.map((e) => e.rev).join('|'));
+  const graph = { rev: graphRev, entries: graphEntries };
   const bootJs = `window.__DSH_BOOT__ = ${JSON.stringify(graph).replaceAll('<', '\\u003c')};\n`;
   writeFileSync(join(dest, 'boot.js'), bootJs);
-  html = html.replace(/<head>/i, '<head><script src="./boot.js"></script>');
+  html = html.replace(/<head>/i, '<head><link rel="stylesheet" href="./shell.css" /><script src="./boot.js"></script>');
   writeFileSync(shellHtml, html);
 
-  // 4. 与 rc.6 抓取图集合核对(存在才比对)
-  const ref = referenceGraph();
+  // 5. 与参考图集合核对(ref-graph-rc6.json 优先;旧抓取图兜底)
+  const REF_FILE = join(repoRoot, 'apps', 'vscode', 'scripts', 'ref-graph-rc6.json');
+  let ref;
+  if (existsSync(REF_FILE)) {
+    ref = new Set(JSON.parse(readFileSync(REF_FILE, 'utf8')).ids);
+  } else {
+    ref = referenceGraph();
+  }
   if (ref !== undefined) {
-    const ids = new Set(entries.map((e) => e.id));
+    const ids = new Set(graphEntries.map((e) => e.id));
     const extra = [...ids].filter((id) => !ref.has(id)).sort();
     const missingIds = [...ref].filter((id) => !ids.has(id)).sort();
-    if (extra.length > 0) console.warn(`⚠ 新增插件(rc.6 抓取图没有):${extra.join(', ')}`);
-    if (missingIds.length > 0) console.warn(`⚠ 缺失插件(rc.6 抓取图有,rc.5 源码没有):${missingIds.join(', ')}`);
+    if (full) {
+      if (extra.length > 0) console.warn(`⚠ 新增插件(参考图没有):${extra.join(', ')}`);
+      if (missingIds.length > 0) console.warn(`⚠ 缺失插件(参考图有,rc.5 源码没有):${missingIds.join(', ')}`);
+    } else if (extra.length > 0 || missingIds.length > 0) {
+      throw new Error(
+        `裁剪图与参考图不一致:\n  extra(参考图没有):${extra.join(', ') || '(无)'}\n  missing(参考图有):${missingIds.join(', ') || '(无)'}\n`
+        + '  裁剪集合已变:确认是上游新增插件还是裁剪误伤;有意变更则更新 scripts/ref-graph-rc6.json',
+      );
+    }
   }
-  console.log(`✅ dsh-shell 装配完成 → ${dest}: plugins=${entries.length}, rev=${graphRev}`);
+  console.log(`✅ dsh-shell 装配完成 → ${dest}: plugins=${graphEntries.length}, rev=${graphRev}${full ? ' (full)' : ''}`);
 }
 
 main().catch((err) => {

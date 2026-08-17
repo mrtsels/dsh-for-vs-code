@@ -89,12 +89,14 @@ await page.waitForTimeout(10000);
 const state = await page.evaluate(() => {
   const root = document.getElementById('root');
   const errBanner = document.querySelector('[class*="error"], [class*="Error"]');
+  const frame = document.querySelector('[class$="_frame"]');
   return {
     rootChildren: root?.children.length ?? -1,
     rootHtml: (root?.innerHTML ?? '').slice(0, 200),
     bodyText: (root?.textContent ?? '').slice(0, 300),
     hasErrorBanner: errBanner !== null,
     bodyBg: getComputedStyle(document.body).backgroundColor,
+    frameBg: frame ? getComputedStyle(frame).backgroundColor : '(无 frame)',
   };
 });
 await page.screenshot({ path: '/tmp/dsh-shell-headless.png' });
@@ -103,4 +105,29 @@ console.log('RELAY LOG:', relayLog.slice(0, 20).join('\n'));
 console.log('CONSOLE(前 20):');
 for (const m of consoleMsgs.slice(0, 20)) console.log(' ', m);
 await browser.close();
+
+// ---- 断言(裁剪模式下应全绿)----
+const failures = [];
+if (state.rootChildren < 1) failures.push('UI 未渲染(root 空)');
+if (state.hasErrorBanner) failures.push('页面出现错误横幅');
+if (consoleMsgs.some((m) => m.includes('already has a registration'))) failures.push('存在 slot 双注册冲突');
+if (!consoleMsgs.some((m) => m.includes('[pageerror]'))) {
+  // 无 pageerror 是期望状态
+} else {
+  const errs = consoleMsgs.filter((m) => m.includes('[pageerror]'));
+  if (errs.length > 0) failures.push(`pageerror:${errs.join(';').slice(0, 200)}`);
+}
+const transparentOk = (bg) => bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)' || bg === 'rgb(0, 0, 0)';
+if (!transparentOk(state.bodyBg)) failures.push(`body 背景非透明:${state.bodyBg}`);
+if (typeof state.frameBg === 'string' && !transparentOk(state.frameBg)) failures.push(`frame 背景非透明:${state.frameBg}`);
+const hasRpc = relayLog.some((l) => l.includes('/api/'));
+if (!hasRpc) failures.push('无任何 RPC 经代理到达 3080');
+const wsOk = relayLog.some((l) => l.includes('WS connected'));
+if (!wsOk) failures.push('WS 事件流未建立');
+
+if (failures.length > 0) {
+  console.log('SMOKE FAIL:\n  ' + failures.join('\n  '));
+  process.exit(1);
+}
+console.log('SMOKE PASS: UI 渲染 / RPC / WS / 无冲突 / 透明融合全部通过');
 process.exit(0);

@@ -101,15 +101,17 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 
 ### Phase 6:定制适配(侧边栏形态)
 
-- [ ] P6-1 定制 boot 图:插件子集(排除 ui-settings*/plan/deliverables/workflow-run/
-      agent-preset/permission-presets、**ui-directory-picker-browse/native(实测全量图有
-      conversation.hero.workspace.directoryFlow 双注册冲突)** 等,对照 refactor-requirements
-      R-A2 的 EXCLUDE 12)
-- [ ] P6-2 侧边栏适配:ui-layout narrow-viewport 折叠链验证;自有 CSS 替代
-      transparentPageChrome DOM 启发式(静态样式表,不做运行时 DOM 遍历)
-- [ ] P6-3 主题对齐:基础样式表用 VS Code 变量(背景透明等),静态 CSS
-- [ ] P6-4 扩展壳接线:连接状态/切换 baseUrl 注入 boot 图;__DSH_WEB_URL__ 保持
-- [ ] P6-5 G0 + 冒烟(窄屏布局正常)
+- [x] P6-1 定制 boot 图:插件子集(39→28,与 ref-graph-rc6.json 断言一致;含 inject 边裁剪;
+      directory-picker-browse/native 一并排除 —— 全量图实测有 directoryFlow 双注册冲突,
+      browse 为 rc.5 源码多出包(rc.6 服务端图没有))
+- [x] P6-2 侧边栏适配:ui-layout 窄布局原生可用(280px 侧栏 + details 折叠);shell.css 静态样式
+      (html/body/#root + [class$=_frame/_sidebarCol/_centerCol/_detailsCol] 透明)替代
+      transparentPageChrome DOM 启发式,冒烟断言 body/frame 透明通过
+- [x] P6-3 主题对齐:透明走静态 CSS(shell.css,与 shell rev 绑定);组件表面色由上游主题决定
+      (与 3080 浏览器一致);VS Code 变量不做运行时注入
+- [x] P6-4 扩展壳接线:__DSH_WEB_URL__ 经 buildHtml 注入(代理地址);baseUrl 切换新增
+      proxy.setTarget(端口不变,转发重定向,webview 无需重载)
+- [x] P6-5 G0 四门绿 + smoke-shell 冒烟通过(28 集:无冲突、透明融合、RPC/WS 全通)
 
 ### Phase 7:功能验证与清理
 
