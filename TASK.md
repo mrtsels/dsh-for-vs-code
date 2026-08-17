@@ -14,6 +14,9 @@
 > 每次 webview ready 按 VS Code 设置强制对齐实例 locale,改设置必生效)。
 > Workspaces 撑满根因修正:SidebarRoot 根是 root+quietBars 双类,属性选择器按整个 class 值
 > 匹配会漏 —— 改用词尾含空格匹配,设 width:100% 真正撑满。
+> webview 内"新会话"按钮拦截:上游 startSession 落在最近 workspace(不保证 VS Code 目录),
+> 改为 bridge 拦截 → 扩展 ensureFolderSession(当前目录)→ bootstrap-session 进入;
+> logo wordmark 快捷方式一并拦截。
 > 待用户:扩展宿主窗口视觉确认(双击 启动扩展.command)。
 
 > 本版重写原因(2026-08-17 用户决策):
