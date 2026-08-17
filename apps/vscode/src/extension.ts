@@ -49,6 +49,8 @@ export function activate(context: vscode.ExtensionContext): void {
     .get<string>('baseUrl', 'http://127.0.0.1:3080');
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
   const state: { value?: string } = {};
+  /** 语言重载防抖时间戳(locale-mismatch 30s 内只重载一次) */
+  let lastLocaleReloadAt = 0;
 
   // ---- 面板与 watcher(先建,回调闭包后续接线) ----
   const changesPanel = new ChangesPanel({ extensionUri: context.extensionUri });
@@ -288,6 +290,16 @@ export function activate(context: vscode.ExtensionContext): void {
         await sessions.seedHistory(childId);
         chatPanel.post({ type: 'session:forked', sessionId: childId });
         await refreshSessionList();
+        break;
+      }
+      // UI 语言与设置不符 → 重载 webview(boot 初始读取连接就绪后可靠;30s 防抖防循环)
+      case 'dsh:locale-mismatch': {
+        const now = Date.now();
+        if (now - lastLocaleReloadAt > 30_000) {
+          lastLocaleReloadAt = now;
+          logger.info('语言不符,重载 webview');
+          chatPanelHost.reload(vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl));
+        }
         break;
       }
       // webview 自动诊断 → 写工作区根 .dsh-webview-diag.json(排查环境差异)

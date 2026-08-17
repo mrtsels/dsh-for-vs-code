@@ -33,6 +33,8 @@ export type WebviewRequest =
   | { type: 'dsh:open-workspace'; title: string; newSession: boolean }
   // webview 布局/语言自动诊断(扩展写入 .dsh-webview-diag.json 供排查)
   | { type: 'dsh:diag'; payload: Record<string, unknown> }
+  // UI 语言与 VS Code 设置不符(boot 初始读取失败/推送丢失)→ 请扩展重载 webview
+  | { type: 'dsh:locale-mismatch' }
   // 内部调试通道:webview 内 error/unhandledrejection 转发(不入 validateWebviewRequest 白名单,
   // 仅 ChatViewProvider 内部消费,不发给业务 handler)
   | { type: 'debug'; kind: 'error' | 'rejection'; message: string };
