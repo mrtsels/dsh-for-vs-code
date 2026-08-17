@@ -78,7 +78,7 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 | 项 | 状态 | 说明 |
 | --- | --- | --- |
 | vendor submodule | ✅ | `47f94385`(0.1.0-rc.5)已初始化;rev 记入 docs/versions.md |
-| fetch+boot 产物 | ⚠️ 运行中 | `dist/web/dsh-plugins`(rc.6 抓取);Phase 5 完成后由 dsh-shell 替代,Phase 7 退役 fetch-dsh-ui.mjs |
+| fetch+boot 产物 | ✅ 已退役 | fetch-dsh-ui.mjs 已删(c9f0350);`dist/web/dsh-shell` 为唯一 UI 源;`dsh-plugins` 旧目录仅留作本地参考(不入 git) |
 | Origin 栅栏 | ✅ 已解 | 扩展侧代理(d60c16f);代理本身保留 |
 | P0/P1/P2 整改 | ✅ | refactor-requirements.md 执行表;P0-2(Chat Participant)待用户 reload 验证 |
 | G0 | ✅ | typecheck 0 / lint 0 warning / 54 tests / build 3 入口(10:07 实测) |
