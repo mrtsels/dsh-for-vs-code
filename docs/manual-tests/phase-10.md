@@ -25,7 +25,9 @@
 - [ ] 指示显示**文件名**而非路径(完整路径在悬停 tooltip);修改文件不保存(isDirty)→ 文件名带 ● 标记,
       发送后模型收到的是**含未保存改动的** buffer 内容
 - [ ] 切换活动编辑器 → 指示实时更新;无活动编辑器(关闭所有编辑器)→ 指示消失
-- [ ] 点击指示 → 切换随消息附着(on 强调色 = 发送时携带);VS Code 设置 `deepseekHarness.context.attachActiveFile` 同步
+- [ ] 点击指示 → 切换随消息附着(on 强调色 = 随消息附着;off 素色 = 仅展示);
+      VS Code 设置 `deepseekHarness.context.attachActiveFile` 同步
+- [ ] 指示与 Chat 消息内容/复制按键**左对齐**(左右 padding 与消息区一致)
 - [ ] untitled 文件(新建未保存)→ 可附着,发送的是当前 buffer 内容
 - [ ] 关闭附着 → 发送不再携带文件正文(但 file/language 元数据行仍注入;指示仍显示)
 - [ ] 大文件开启附着 → 正文按 20k 截断,带截断标注

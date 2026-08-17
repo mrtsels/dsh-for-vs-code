@@ -488,25 +488,29 @@ body.dsh-sessions #dsh-attachment-root { display: none !important; }
 body.dsh-dragging .dsh-drop-overlay { display: block; }
 .dsh-attach-toolbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-  padding: 4px 10px 6px;
+  /* 左右对齐 Chat 消息区(.scroll padding = clearance + 16px):与消息内容/复制按键左对齐 */
+  padding: 4px calc(var(--dsh-composer-side-clearance, 16px) + 16px) 6px;
 }
 .dsh-attach-toolbar[hidden] { display: none; }
-/* 活动文件 / 选区指示:存在即显示(无禁用灰态);on = 随消息附着(强调色),off = 仅展示 */
+/* 活动文件 / 选区指示:存在即显示(无禁用灰态);
+   on = 随消息附着(普通强调色氛围),off = 仅展示(素色) */
 .dsh-attach-indicator {
   display: inline-flex; align-items: center; gap: 5px;
   max-width: 280px; box-sizing: border-box;
   padding: 2px 10px; border-radius: 10px; cursor: pointer;
-  border: 1px solid var(--dsh-host-link, var(--dsh-host-accent));
-  color: var(--dsh-host-link, var(--dsh-host-accent));
-  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 12%, var(--dsh-host-bg));
+  border: 1px solid var(--dsw-alias-border-l2, var(--dsh-host-border));
+  background: var(--dsh-host-bg);
+  color: var(--dsw-alias-label-secondary, var(--dsh-host-fg));
   font-size: 11px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.dsh-attach-indicator:hover {
-  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 20%, var(--dsh-host-bg));
-}
+.dsh-attach-indicator:hover { background: var(--dsh-host-hover); }
 .dsh-attach-indicator.on {
-  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 18%, var(--dsh-host-bg));
-  box-shadow: 0 0 0 1px var(--dsh-host-link, var(--dsh-host-accent)) inset;
+  border-color: var(--dsh-host-link, var(--dsh-host-accent));
+  color: var(--dsh-host-link, var(--dsh-host-accent));
+  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 12%, var(--dsh-host-bg));
+}
+.dsh-attach-indicator.on:hover {
+  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 20%, var(--dsh-host-bg));
 }
 .dsh-attach-indicator[hidden] { display: none; }
 .dsh-attach-indicator-icon { flex: none; display: inline-flex; }
