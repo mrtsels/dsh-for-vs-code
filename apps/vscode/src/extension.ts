@@ -509,6 +509,7 @@ export function activate(context: vscode.ExtensionContext): void {
       ).then((instanceLocale) => {
         void vscode.window.showInformationMessage(
           `✅ 已连接 dsh ${desc.version} · cwd=${desc.cwd}\nUI rev=${shellRev}\nVS Code locale=${vscLocale} · 实例 locale=${instanceLocale ?? '(未知)'}`,
+          { modal: true },
         );
       });
     });
@@ -696,26 +697,30 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // P2-1:验证连接命令(手动触发,输出 cwd/模型/版本一致性)
+  // P2-1:验证连接命令(手动触发,输出 cwd/模型/版本一致性)。
+  // 不依赖 runtime.connect()(其 Promise 仅在连接成功后 resolve,实例不可达时挂起导致无弹窗),
+  // 直接读运行时缓存状态 + 本地装配 rev,立即弹窗;实例 locale 经带超时的 RPC 读取。
   disposables.add(
     vscode.commands.registerCommand('deepseekHarness.verifyConnection', async () => {
-      try {
-        const desc = await runtime.connect();
-        const cwdNote =
-          workspaceRoot !== '' && desc.cwd !== workspaceRoot
-            ? `\n⚠ 实例 cwd(${desc.cwd}) ≠ 工作区(${workspaceRoot})`
-            : '';
-        // 本地装配的 dsh-shell UI rev(版本确认:重开后若 rev 变化即已加载新产物)
-        const shellRev = readUiShellRev(context);
-        void vscode.window.showInformationMessage(
-          `✅ 已连接 dsh ${desc.version}\nprovider=${desc.provider}\n模型=${desc.model}\ncwd=${desc.cwd}${cwdNote}`
-            + `\nUI rev=${shellRev}(dist/web/dsh-shell 装配版本)`,
-        );
-      } catch (error) {
-        void vscode.window.showErrorMessage(
-          `连接失败:${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      const shellRev = readUiShellRev(context);
+      const vscLocale = vscode.workspace.getConfiguration('deepseekHarness').get<string>('locale', 'follow-web');
+      const desc = runtime.description;
+      const state = runtime.currentState;
+      const instanceLocale = await readInstanceLocale(
+        vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+      );
+      logger.info(`验证连接:state=${state} rev=${shellRev}`);
+      // modal:居中模态弹窗(toast 通知右下角易被忽略)
+      void vscode.window.showInformationMessage(
+        [
+          `DeepSeek Harness:${state === 'connected' ? '已连接' : state}`,
+          `UI rev=${shellRev}(dist/web/dsh-shell 装配版本)`,
+          `VS Code locale=${vscLocale} · 实例 locale=${instanceLocale ?? '(读不到:实例未就绪?)'}`,
+          `cwd=${desc?.cwd ?? '(未连接)'} · provider=${desc?.provider ?? '-'} · 模型=${desc?.model ?? '-'}`,
+          '关闭本弹窗后,请把内容告诉我',
+        ].join('\n'),
+        { modal: true },
+      );
     }),
   );
 
