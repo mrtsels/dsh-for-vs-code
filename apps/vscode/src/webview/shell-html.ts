@@ -26,11 +26,13 @@ export interface ShellHtmlInput {
   bootSession?: { sessionId: string } | undefined;
   /** 宿主类型:侧边栏视图(sideBar 底色)或编辑器面板(editor 底色);shell.css 按此选主题变量 */
   host?: 'sidebar' | 'panel' | undefined;
+  /** VS Code 设置的语言偏好(zh/en;空=follow-web 不干预);boot 桥据此对齐实例 locale */
+  locale?: string | undefined;
 }
 
 /** 装配完整 webview HTML:head 内插 CSP/base;body 开标签后插 __DSH_WEB_URL__/__DSH_BOOT_SESSION__/__DSH_HOST__ + boot。 */
 export function assembleShellHtml(input: ShellHtmlInput): string {
-  const { shellHtml, bootJs, csp, nonce, baseHref, proxyBase, proxyWs, bootSession, host } = input;
+  const { shellHtml, bootJs, csp, nonce, baseHref, proxyBase, proxyWs, bootSession, host, locale } = input;
   // boot 内容防 </script> 提前闭合(内容为本地受信 JSON,防御性转义)
   const safeBoot = bootJs.replace(/<\/script>/gi, '<\\/script>');
   const cspMeta =
@@ -44,9 +46,13 @@ export function assembleShellHtml(input: ShellHtmlInput): string {
   const hostBlock = host === undefined
     ? ''
     : `<script nonce="${nonce}">window.__DSH_HOST__ = '${host}';</script>`;
+  const localeBlock = locale === undefined || locale === ''
+    ? ''
+    : `<script nonce="${nonce}">window.__DSH_LOCALE__ = '${locale}';</script>`;
   const bodyBlock =
     `<script nonce="${nonce}">window.__DSH_WEB_URL__ = '${proxyBase}';</script>`
     + hostBlock
+    + localeBlock
     + bootSessionBlock
     + `<script nonce="${nonce}">${safeBoot}</script>`;
   let out = shellHtml;

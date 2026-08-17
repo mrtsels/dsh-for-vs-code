@@ -32,6 +32,8 @@ interface ChatPanelOptions {
   getProxyBase: () => string;
   /** 首开会话 id(globalState 持久化);undefined 表示尚未创建,由 extension 事后补发 */
   getBootSession: () => { sessionId: string } | undefined;
+  /** VS Code 语言设置(zh/en;''=follow-web);注入 __DSH_LOCALE__ 供 boot 桥对齐实例 */
+  getLocale: () => string;
 }
 
 export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
@@ -41,6 +43,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
   private readonly getBaseUrl: () => string;
   private readonly getProxyBase: () => string;
   private readonly getBootSession: () => { sessionId: string } | undefined;
+  private readonly getLocale: () => string;
   /** 最近一次 buildHtml 是否已把 bootSession 注入 html(供 extension 判断是否需补发切换消息) */
   private bootSessionInjected = false;
   /** webview 调试消息(错误横幅/CSP 探针)落输出通道,不弹 UI */
@@ -56,6 +59,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     this.getBaseUrl = options.getBaseUrl;
     this.getProxyBase = options.getProxyBase;
     this.getBootSession = options.getBootSession;
+    this.getLocale = options.getLocale;
   }
 
   /** 本次注入的 html 是否已携带 bootSession(webview 尚未装载时由 extension 补发切换消息) */
@@ -174,6 +178,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
       shellHtml, bootJs, csp, nonce, baseHref, proxyBase, proxyWs,
       bootSession,
       host: this.view !== undefined ? 'sidebar' : 'panel',
+      locale: this.getLocale(),
     });
   }
 }

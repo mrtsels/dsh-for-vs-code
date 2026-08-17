@@ -85,6 +85,8 @@ export function activate(context: vscode.ExtensionContext): void {
       const id = context.globalState.get<string>('dsh.initialSessionId');
       return id === undefined ? undefined : { sessionId: id };
     },
+    // 语言:注入 __DSH_LOCALE__,boot 桥按此对齐实例(locale 覆盖竞态修复)
+    getLocale: () => vscode.workspace.getConfiguration('deepseekHarness').get<string>('locale', 'follow-web'),
   });
   // 设置桥(Phase 9):theme/locale/permission/agentPreset/busyEnter 双向同步;
   // 语言写回成功后重载 webview(上游 locale 仅 boot 时应用)

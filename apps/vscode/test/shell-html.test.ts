@@ -63,4 +63,13 @@ describe('assembleShellHtml(Route A webview 装配)', () => {
     expect(outPanel).toContain("window.__DSH_HOST__ = 'panel'");
     expect(assembleShellHtml(INPUT)).not.toContain('__DSH_HOST__');
   });
+
+  it('locale 注入 __DSH_LOCALE__(zh/en);空/缺省不注入', () => {
+    const out = assembleShellHtml({ ...INPUT, locale: 'zh' });
+    expect(out).toContain("window.__DSH_LOCALE__ = 'zh'");
+    const outEn = assembleShellHtml({ ...INPUT, locale: 'en' });
+    expect(outEn).toContain("window.__DSH_LOCALE__ = 'en'");
+    expect(assembleShellHtml({ ...INPUT, locale: '' })).not.toContain('__DSH_LOCALE__');
+    expect(assembleShellHtml(INPUT)).not.toContain('__DSH_LOCALE__');
+  });
 });

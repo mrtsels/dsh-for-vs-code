@@ -472,6 +472,8 @@ const BRIDGE_JS = `(() => {
         let view = 'chat';
         try { view = localStorage.getItem(VIEW_KEY) === 'workspaces' ? 'workspaces' : 'chat'; } catch (err) {}
         setView(view);
+        // 语言对齐:等 connection 就绪后执行(延迟 2s)
+        window.setTimeout(syncLocale, 2000);
         if (typeof MutationObserver !== 'undefined') {
           const observer = new MutationObserver(scheduleReinsert);
           observer.observe(document.body, { childList: true, subtree: true });
@@ -482,7 +484,56 @@ const BRIDGE_JS = `(() => {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startLayout);
   else startLayout();
 
-  // 5. 会话切换桥(既有 + Phase 9 bootstrap:同一写入路径,不同消息名)
+  // 5. 语言对齐(boot 竞态修复):应用 boot 后 connection 就绪,读实例 locale.preference,
+  // 与 __DSH_LOCALE__(VS Code 设置)不符则 settings.update 写回 —— 服务端推送
+  // settings/document-updated → 上游 locale 插件 refresh → 热切换(无需 reload)。
+  // 竞态场景:boot 时 connection 未就绪 → 上游 settings 快照未加载 → 语言=浏览器语言
+  // (navigator.language),且实例值已等于目标时无推送可触发 → 用"双写对调值再写回"
+  // 强制推送;UI 语言已正确(检测 tab 文本)则跳过,避免无谓闪动。
+  const detectUiLocale = () => {
+    const tabs = document.querySelectorAll('[class$="_tab"]');
+    const text = [...tabs].map((t) => t.textContent ?? '').join(' ');
+    if (text.includes('对话') || text.includes('轨迹')) return 'zh';
+    if (text.includes('Chat') || text.includes('Trajectory')) return 'en';
+    return undefined;
+  };
+  const updateLocale = (base, envelope, value) =>
+    fetch(base + '/api/settings.update', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: envelope('settings.update', { ns: 'locale', patch: { preference: value } }),
+    });
+  const syncLocale = () => {
+    const target = window.__DSH_LOCALE__;
+    if (target !== 'zh' && target !== 'en') return;
+    const base = window.__DSH_WEB_URL__;
+    if (typeof base !== 'string' || base === '') return;
+    const envelope = (method, payload) => JSON.stringify({ type: 'client-request', rpcId: 'bridge-locale', method, payload });
+    fetch(base + '/api/settings.describe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: envelope('settings.describe', {}),
+    }).then((res) => res.json()).then(async (body) => {
+      const namespaces = body?.result?.value?.namespaces;
+      const current = Array.isArray(namespaces)
+        ? namespaces.find((n) => n.ns === 'locale')?.value?.preference
+        : undefined;
+      if (detectUiLocale() === target) return; // UI 已是目标语言,无需干预
+      if (current !== target) {
+        await updateLocale(base, envelope, target); // 值不同:一次写即触发推送
+      } else {
+        // 值相同但 UI 不符(boot 快照未加载):双写对调值再写回,强制推送触发上游 refresh
+        const other = target === 'zh' ? 'en' : 'zh';
+        await updateLocale(base, envelope, other);
+        await updateLocale(base, envelope, target);
+      }
+    }).catch((err) => {
+      // 实例不可达:静默,语言保持当前(下次 reload 再试)
+      console.error('[dsh-bridge] locale sync:', String(err));
+    });
+  };
+
+  // 6. 会话切换桥(既有 + Phase 9 bootstrap:同一写入路径,不同消息名)
   window.addEventListener('message', (event) => {
     const msg = event.data;
     if (msg === null || typeof msg !== 'object') return;
