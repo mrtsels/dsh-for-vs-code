@@ -126,7 +126,7 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 ### Phase 8:交付门
 
 - [ ] P8-1 G1 审查(Phase 5+6)FAIL→修复
-- [ ] P8-2 G2 交付门(全量回归 + §7 Checkbox 更新)
+- [ ] P8-2 G2 交付门(全量回归:docs/manual-tests/phase-5.md 全项 + G0 + smoke-shell)
 - [ ] P8-3 tag + 发布文档
 
 ## 4. 阶段门与验收(沿用)
