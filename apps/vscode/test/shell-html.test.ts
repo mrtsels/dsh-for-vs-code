@@ -47,4 +47,20 @@ describe('assembleShellHtml(Route A webview 装配)', () => {
     expect(out).toContain("window.__DSH_WEB_URL__");
     expect(out).toContain('Content-Security-Policy');
   });
+
+  it('bootSession 注入 __DSH_BOOT_SESSION__(JSON,含转义),且位于 boot 之前', () => {
+    const out = assembleShellHtml({ ...INPUT, bootSession: { sessionId: 'session-ab<cd' } });
+    const bootSessionAt = out.indexOf('window.__DSH_BOOT_SESSION__ = {"sessionId":"session-ab<cd"}');
+    const bootAt = out.indexOf('window.__DSH_BOOT__');
+    expect(bootSessionAt).toBeGreaterThan(-1);
+    expect(bootAt).toBeGreaterThan(bootSessionAt); // boot 桥先读到会话再执行
+  });
+
+  it('host 注入 __DSH_HOST__(sidebar/panel);缺省不注入', () => {
+    const out = assembleShellHtml({ ...INPUT, host: 'sidebar' });
+    expect(out).toContain("window.__DSH_HOST__ = 'sidebar'");
+    const outPanel = assembleShellHtml({ ...INPUT, host: 'panel' });
+    expect(outPanel).toContain("window.__DSH_HOST__ = 'panel'");
+    expect(assembleShellHtml(INPUT)).not.toContain('__DSH_HOST__');
+  });
 });

@@ -49,7 +49,9 @@ export type ExtensionMessage =
   | { type: 'meta:subagents'; sessionId: string; entries: SubagentEntry[] }
   | { type: 'meta:goals'; sessionId: string; goal: GoalView | undefined }
   // 原生会话切换:扩展 → webview(boot 桥监听并写 dsh.sessions.current + reload)
-  | { type: 'dsh:switch-session'; sessionId: string };
+  | { type: 'dsh:switch-session'; sessionId: string }
+  // 首开/文件夹切换 bootstrap(Phase 9):与 switch-session 同路径,但语义为"新建会话接管"
+  | { type: 'dsh:bootstrap-session'; sessionId: string };
 
 /** 改动条目(方案 a 快照 diff,供审批面板) */
 export interface ChangeItem {

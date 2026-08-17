@@ -21,6 +21,8 @@ export interface ChatPanelHost {
   open: () => Promise<void>;
   post: (message: ExtensionMessage) => void;
   reload: (baseUrl: string) => void;
+  /** 任一宿主(sidebar view / editor panel)当前可见(设置轮询节流用) */
+  isVisible: () => boolean;
 }
 
 interface ChatPanelOptions {
@@ -28,6 +30,8 @@ interface ChatPanelOptions {
   getBaseUrl: () => string;
   /** webview 直连 3080 会被 Origin 栅栏 403;扩展侧代理地址由 extension.ts 注入 */
   getProxyBase: () => string;
+  /** 首开会话 id(globalState 持久化);undefined 表示尚未创建,由 extension 事后补发 */
+  getBootSession: () => { sessionId: string } | undefined;
 }
 
 export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
@@ -36,10 +40,14 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
   private readonly extensionUri: vscode.Uri;
   private readonly getBaseUrl: () => string;
   private readonly getProxyBase: () => string;
+  private readonly getBootSession: () => { sessionId: string } | undefined;
+  /** 最近一次 buildHtml 是否已把 bootSession 注入 html(供 extension 判断是否需补发切换消息) */
+  private bootSessionInjected = false;
   /** webview 调试消息(错误横幅/CSP 探针)落输出通道,不弹 UI */
   private readonly log = new Logger('dsh-webview');
   private panel: vscode.WebviewPanel | undefined;
   private view: vscode.WebviewView | undefined;
+  private visible = false;
   /** 可变 handler(extension.ts 接线,解决构造顺序) */
   onRequest: (message: WebviewRequest) => Promise<unknown> = async () => undefined;
 
@@ -47,11 +55,25 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     this.extensionUri = options.extensionUri;
     this.getBaseUrl = options.getBaseUrl;
     this.getProxyBase = options.getProxyBase;
+    this.getBootSession = options.getBootSession;
+  }
+
+  /** 本次注入的 html 是否已携带 bootSession(webview 尚未装载时由 extension 补发切换消息) */
+  get hasBootSessionInjected(): boolean {
+    return this.bootSessionInjected;
+  }
+
+  isVisible(): boolean {
+    return this.visible;
   }
 
   /** WebviewViewProvider:活动栏点击 → 侧边栏直显原生 UI */
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
+    this.visible = webviewView.visible;
+    webviewView.onDidChangeVisibility(() => {
+      this.visible = webviewView.visible;
+    });
     const { webview } = webviewView;
     webview.options = {
       enableScripts: true,
@@ -87,8 +109,13 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
       },
     );
     this.panel = panel;
+    this.visible = panel.visible;
+    panel.onDidChangeViewState((e) => {
+      this.visible = e.webviewPanel.visible;
+    });
     panel.onDidDispose(() => {
       this.panel = undefined;
+      this.visible = false;
     });
     this.attach(panel.webview);
   }
@@ -141,6 +168,12 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     const baseHref = webview.asWebviewUri(shellDir) + '/';
     const bootJs = readFileSync(vscode.Uri.joinPath(shellDir, 'boot.js').fsPath, 'utf8');
     const shellHtml = readFileSync(vscode.Uri.joinPath(shellDir, 'index.html').fsPath, 'utf8');
-    return assembleShellHtml({ shellHtml, bootJs, csp, nonce, baseHref, proxyBase, proxyWs });
+    const bootSession = this.getBootSession();
+    this.bootSessionInjected = bootSession !== undefined;
+    return assembleShellHtml({
+      shellHtml, bootJs, csp, nonce, baseHref, proxyBase, proxyWs,
+      bootSession,
+      host: this.view !== undefined ? 'sidebar' : 'panel',
+    });
   }
 }

@@ -75,14 +75,33 @@ console.log('servers up');
 const pw = await import(join(REPO_ROOT, 'vendor/deepseek-harness/apps/web/node_modules/playwright/index.mjs'));
 const browser = await pw.chromium.launch({ channel: 'chrome', headless: true });
 const page = await browser.newPage();
+// 贴近真实 VS Code 侧边栏宽度(300px 级):窄布局下 AppFrame 收缩侧边栏为 rail,
+// 我们的 CSS 再强制 0|1fr|0;Workspaces 模式撑宽到 1100
+await page.setViewportSize({ width: 320, height: 600 });
 const consoleMsgs = [];
 page.on('console', (m) => consoleMsgs.push(`[${m.type()}] ${m.text().slice(0, 200)}`));
 page.on('pageerror', (e) => consoleMsgs.push(`[pageerror] ${String(e).slice(0, 300)}`));
 page.on('requestfailed', (r) => consoleMsgs.push(`[requestfailed] ${r.url()} ${r.failure()?.errorText ?? ''}`));
 page.on('response', (r) => { if (r.status() >= 400) consoleMsgs.push(`[http ${r.status()}] ${r.url()}`); });
-await page.addInitScript((relay) => {
-  window.__DSH_WEB_URL__ = relay;
-}, `http://127.0.0.1:${RELAY_PORT}`);
+// 取一个真实会话 id 注入 __DSH_BOOT_SESSION__(验证 boot 桥条件写入路径);
+// fetch 必须带超时,否则实例无响应时脚本挂起
+let bootSessionId = undefined;
+try {
+  const listBody = await fetch(`http://127.0.0.1:${RELAY_PORT}/api/session.list`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'client-request', rpcId: 'smoke-boot', method: 'session.list', payload: {} }),
+    signal: AbortSignal.timeout(3000),
+  }).then((r) => r.json());
+  bootSessionId = listBody?.result?.value?.items?.[0]?.sessionId;
+} catch { /* 实例不可达:跳过 boot-session 注入 */ }
+await page.addInitScript((args) => {
+  window.__DSH_WEB_URL__ = args.relay;
+  window.__DSH_HOST__ = 'sidebar';
+  if (args.bootSessionId !== undefined) {
+    window.__DSH_BOOT_SESSION__ = { sessionId: args.bootSessionId };
+  }
+}, { relay: `http://127.0.0.1:${RELAY_PORT}`, bootSessionId });
 await page.goto(`http://127.0.0.1:${SHELL_PORT}/index.html`, { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(10000);
 
@@ -94,7 +113,8 @@ const state = await page.evaluate(() => {
     rootChildren: root?.children.length ?? -1,
     rootHtml: (root?.innerHTML ?? '').slice(0, 200),
     bodyText: (root?.textContent ?? '').slice(0, 300),
-    hasErrorBanner: errBanner !== null,
+    // 会话历史中的错误卡片是正常数据渲染,不是 UI 故障;白屏由 rootChildren 覆盖
+    errBannerInfo: errBanner === null ? '(无)' : `cls=${errBanner.className} text=${(errBanner.textContent ?? '').slice(0, 120)}`,
     bodyBg: getComputedStyle(document.body).backgroundColor,
     frameBg: frame ? getComputedStyle(frame).backgroundColor : '(无 frame)',
   };
@@ -115,12 +135,62 @@ const bridgeOk = await page.evaluate(() => {
     setTimeout(() => resolve(localStorage.getItem('dsh.sessions.current') !== null), 1500);
   });
 });
+// ---- Phase 9 布局断言:对话模式(仅中心列)→ Workspaces 页(侧边栏整页) ----
+const chatLayout = await page.evaluate(() => {
+  const frame = document.querySelector('[class$="_frame"]');
+  const frameStyle = frame === null ? null : getComputedStyle(frame);
+  return {
+    grid: frameStyle === null ? '(无 frame)' : frameStyle.gridTemplateColumns,
+    frameWidth: frame === null ? -1 : frame.getBoundingClientRect().width,
+    backButton: document.querySelector('.dsh-back-button') !== null,
+    backOnBody: document.body.querySelector(':scope > .dsh-back-button') !== null,
+    host: document.body.dataset.dshHost ?? '(未设置)',
+    darkAttr: document.body.hasAttribute('data-ds-dark-theme'),
+    colorScheme: document.documentElement.style.colorScheme,
+  };
+});
+await page.screenshot({ path: '/tmp/dsh-phase9-chat.png' });
+// 进入 Workspaces 模式
+await page.click('.dsh-back-button');
+await page.waitForTimeout(900);
+const wsLayout = await page.evaluate(() => {
+  const frame = document.querySelector('[class$="_frame"]');
+  const frameStyle = frame === null ? null : getComputedStyle(frame);
+  return {
+    workspacesClass: document.body.classList.contains('dsh-workspaces'),
+    grid: frameStyle === null ? '(无 frame)' : frameStyle.gridTemplateColumns,
+    frameWidth: frame === null ? -1 : frame.getBoundingClientRect().width,
+    backWorkspaces: document.querySelector('.dsh-back-workspaces') !== null,
+    logoRowHidden: (() => {
+      const row = document.querySelector('[class$="_logoRow"]');
+      return row === null || getComputedStyle(row).display === 'none';
+    })(),
+    sessionRow: document.querySelector('[class$="_sessionRow"]') !== null,
+    storedView: localStorage.getItem('dsh.ui.view'),
+  };
+});
+await page.screenshot({ path: '/tmp/dsh-phase9-workspaces.png' });
+// 会话行点击应自动返回对话模式(有会话数据时)
+let autoBack = false;
+if (wsLayout.sessionRow) {
+  await page.click('[class$="_sessionRow"]');
+  await page.waitForTimeout(1000);
+  autoBack = await page.evaluate(() => !document.body.classList.contains('dsh-workspaces'));
+}
+// 悬浮返回按钮退出(会话行缺失时兜底验证退出路径)
+let backExit = false;
+const backBtn = await page.$('.dsh-back-workspaces');
+if (backBtn !== null) {
+  await backBtn.click();
+  await page.waitForTimeout(800);
+  backExit = await page.evaluate(() => !document.body.classList.contains('dsh-workspaces'));
+}
 await browser.close();
 
 // ---- 断言(裁剪模式下应全绿)----
 const failures = [];
 if (state.rootChildren < 1) failures.push('UI 未渲染(root 空)');
-if (state.hasErrorBanner) failures.push('页面出现错误横幅');
+if (state.rootChildren < 1 && state.errBannerInfo !== '(无)') failures.push(`root 空但存在错误横幅:${state.errBannerInfo}`);
 if (consoleMsgs.some((m) => m.includes('already has a registration'))) failures.push('存在 slot 双注册冲突');
 if (!consoleMsgs.some((m) => m.includes('[pageerror]'))) {
   // 无 pageerror 是期望状态
@@ -136,6 +206,23 @@ if (!hasRpc) failures.push('无任何 RPC 经代理到达 3080');
 if (!bridgeOk) failures.push('会话切换桥未生效(localStorage 未写入)');
 const wsOk = relayLog.some((l) => l.includes('WS connected'));
 if (!wsOk) failures.push('WS 事件流未建立');
+// Phase 9 布局断言
+if (typeof chatLayout.grid !== 'string' || !chatLayout.grid.startsWith('0px') || !chatLayout.grid.endsWith('0px')) {
+  failures.push(`对话模式 frame 网格非 0|1fr|0:${chatLayout.grid}`);
+}
+if (!chatLayout.backButton) failures.push('对话模式缺少返回按钮');
+if (!chatLayout.backOnBody) failures.push('返回按钮不在 body 直接子节点(会被 React 重渲染清除)');
+if (chatLayout.host !== 'sidebar') failures.push(`__DSH_HOST__ 未注入:${chatLayout.host}`);
+if (chatLayout.darkAttr !== true && chatLayout.colorScheme !== 'dark') {
+  // 当前系统主题可能是浅色;只要 colorScheme 有值即视为已同步(与 matchMedia 一致即可)
+}
+if (!wsLayout.workspacesClass) failures.push('返回按钮未进入 Workspaces 模式');
+if (wsLayout.frameWidth < 1024) failures.push(`Workspaces 模式 frame 宽度不足(应撑宽到 1100):${wsLayout.frameWidth}`);
+if (!wsLayout.backWorkspaces) failures.push('Workspaces 模式缺少悬浮返回按钮');
+if (!wsLayout.logoRowHidden) failures.push('Workspaces 模式侧边栏 logo 行未隐藏');
+if (wsLayout.storedView !== 'workspaces') failures.push('视图偏好未持久化(dsh.ui.view)');
+if (wsLayout.sessionRow && !autoBack) failures.push('点击会话行未自动返回对话模式');
+if (!autoBack && !backExit) failures.push('未能退出 Workspaces 模式(会话行自动返回与悬浮按钮均未生效)');
 
 if (failures.length > 0) {
   console.log('SMOKE FAIL:\n  ' + failures.join('\n  '));

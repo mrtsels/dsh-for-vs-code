@@ -1,6 +1,6 @@
 {
- "rev": "rc6-crop",
- "count": 28,
+ "rev": "rc6-crop-phase9",
+ "count": 29,
  "ids": [
   "@deepseek-ai/dsh-api-gateway",
   "@deepseek-ai/dsh-api-remotes",
@@ -18,6 +18,7 @@
   "@deepseek-ai/dsh-client-ui-layout",
   "@deepseek-ai/dsh-client-ui-message-feedback",
   "@deepseek-ai/dsh-client-ui-model-selection",
+  "@deepseek-ai/dsh-client-ui-plan",
   "@deepseek-ai/dsh-client-ui-settings",
   "@deepseek-ai/dsh-client-ui-sidebar",
   "@deepseek-ai/dsh-client-ui-skill",
@@ -30,5 +31,6 @@
   "@deepseek-ai/dsh-cordis-client-runner",
   "@deepseek-ai/dsh-session-log-export",
   "@deepseek-ai/dsh-typert-registry"
- ]
+ ],
+ "note": "Phase 9: 恢复 ui-plan(Mode/计划控制);原 28 集基线见 git 历史"
 }
