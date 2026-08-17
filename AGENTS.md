@@ -62,6 +62,11 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
   不保证链接 VS Code 目录;bridge 在 document capture 拦截 `[class$="_newSession"]`/logo
   wordmark(停止传播,上游不触发)→ postMessage dsh:new-session → 扩展 ensureFolderSession
   (当前目录)→ bootstrap-session → reload 进入;VIEW_KEY 置 chat 保证回到对话页
+- **会话管理页"全部跳转"交互**(用户准则,2026-08-18):workspace 行点击拦截为跳转
+  (dsh:open-workspace{title,newSession} → 扩展按标题匹配 workspace,复用 blank/最近会话或
+  新建 → bootstrap-session 跳转);workspace 行 ... 管理菜单保留;初始化自动展开全部 workspace
+  (expanding flag 防拦截)+ 隐藏 chevron —— 页面上无展开/折叠派生交互;rowActions 的 + 按钮
+  是最后一个 button(ellipsis 在 Menu 包裹 span 内,不在 rowActions 直接子级)
 - **会话切换按钮插 title 行内**(用户要求,2026-08-18):上游组件重渲染会清除注入节点 →
   MutationObserver(rAF)重插 + document capture 事件委托(按钮移除瞬间点击仍命中);
   空会话 hero 无 title 行 → fixed 悬浮兜底;Workspaces 页顶部 fixed 返回
