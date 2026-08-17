@@ -243,7 +243,8 @@ if (backBtn !== null) {
 }
 console.log('[smoke] 返回对话模式,Phase 10 附着断言…');
 // ---- Phase 10 附着 UI 断言(对话模式)----
-// 1) 注入宿主状态(模拟扩展推送 dsh:attachments:state)→ 工具栏渲染开关 chip 与文件 chip
+// 1) 注入宿主状态(模拟扩展推送 dsh:attachments:state)→ 输入卡片内渲染指示条
+//    (active file → icon+文件名;selection → icon+N lines selected;拖入文件 → chip)
 await page.evaluate(() => {
   window.postMessage({
     type: 'dsh:attachments:state',
@@ -263,16 +264,37 @@ await page.evaluate(() => {
 await page.waitForTimeout(500);
 const attachUi = await page.evaluate(() => {
   const root = document.getElementById('dsh-attachment-root');
+  const af = document.querySelector('.dsh-attach-indicator[data-kind="activeFile"]');
+  const sel = document.querySelector('.dsh-attach-indicator[data-kind="selection"]');
   return {
     rootPresent: root !== null,
     composerCard: document.querySelector('[data-composer-card]') !== null,
-    toggles: [...document.querySelectorAll('.dsh-attach-toggle')].map((b) => ({
-      kind: b.getAttribute('data-kind'),
-      on: b.classList.contains('on'),
-      disabled: b.classList.contains('disabled'),
-    })),
+    insideCard: root !== null && root.parentElement !== null && root.parentElement.hasAttribute('data-composer-card'),
+    activeFileVisible: af !== null && !af.hidden,
+    activeFileText: af === null ? '' : af.textContent ?? '',
+    selectionVisible: sel !== null && !sel.hidden,
+    selectionText: sel === null ? '' : sel.textContent ?? '',
     fileChips: document.querySelectorAll('.dsh-attach-file').length,
   };
+});
+// 2) 不存在则不显示:推送无活动文件/无选区/无附件的状态 → 指示条整体隐藏
+await page.evaluate(() => {
+  window.postMessage({
+    type: 'dsh:attachments:state',
+    state: {
+      activeFileEnabled: true,
+      selectionEnabled: true,
+      activeFileAvailable: false,
+      selectionAvailable: false,
+      selections: [],
+      attachments: [],
+    },
+  }, '*');
+});
+await page.waitForTimeout(400);
+const attachEmpty = await page.evaluate(() => {
+  const toolbar = document.querySelector('.dsh-attach-toolbar');
+  return toolbar === null ? '(no toolbar)' : toolbar.hidden;
 });
 // 2) 模拟 Explorer 拖放(text/uri-list)→ 附着 UI 回传 dsh:attachments:add
 const dropMsg = await page.evaluate(() => new Promise((resolve) => {
@@ -340,14 +362,18 @@ if (sessionsLayout.rows > 0) {
 if (!narrowOverflow.noHScroll) failures.push('320px 出现横向滚动(违规)');
 // 返回对话模式(React header 返回 → __dshBridge.setView)
 if (!backExit) failures.push('会话页 header 返回按钮未能切回对话模式');
-// Phase 10 附着 UI 断言:状态注入 → 开关/文件 chip 渲染;模拟 Explorer 拖放 → 回传 add
+// Phase 10 附着 UI 断言:状态注入 → 输入卡片内指示条(icon+文件名 / icon+N lines selected)
+//   + 文件 chip;不存在则不显示;模拟 Explorer 拖放 → 回传 add(仅断言代码,运行由用户安排)
 if (!attachUi.composerCard) failures.push('对话模式缺少上游 composer(data-composer-card)');
 if (!attachUi.rootPresent) failures.push('附着 UI 根节点未注入(#dsh-attachment-root)');
-if (attachUi.toggles.length < 2) failures.push(`附着开关 chip 缺失(${attachUi.toggles.length})`);
-const activeToggle = attachUi.toggles.find((t) => t.kind === 'activeFile');
-if (activeToggle === undefined || !activeToggle.on) failures.push('activeFile 开关未按状态渲染(on)');
-if (activeToggle !== undefined && activeToggle.disabled) failures.push('activeFile 开关错误禁用(编辑器可用)');
+if (!attachUi.insideCard) failures.push('附着条未注入输入卡片内(应在 Message your agent 输入框上方)');
+if (!attachUi.activeFileVisible) failures.push('activeFile 指示未显示(有活动文件+开启时应显示 icon+文件名)');
+if (!attachUi.activeFileText.includes('a.ts')) failures.push(`activeFile 指示缺文件名:${attachUi.activeFileText}`);
+if (attachUi.activeFileText.includes('src/a.ts')) failures.push('activeFile 指示应显示文件名而非路径');
+if (!attachUi.selectionVisible) failures.push('selection 指示未显示(有选区+开启时应显示 icon+N lines selected)');
+if (!/3 lines selected/.test(attachUi.selectionText)) failures.push(`selection 指示缺行数:${attachUi.selectionText}`);
 if (attachUi.fileChips < 1) failures.push('附着文件 chip 未渲染');
+if (attachEmpty !== true) failures.push(`无活动文件/选区时指示条应隐藏:${attachEmpty}`);
 if (dropMsg === null || dropMsg.error !== undefined || dropMsg.attachments?.length !== 2) {
   failures.push(`拖放未回传 dsh:attachments:add:${JSON.stringify(dropMsg)}`);
 }

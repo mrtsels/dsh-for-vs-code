@@ -476,11 +476,9 @@ body, body[data-ds-dark-theme] {
   -webkit-background-clip: text !important;
 }
 
-/* ---- Phase 10 附着 UI(注入输入区上方;dsh-attachment-ui.js 渲染,shell.css 提供样式) ---- */
-#dsh-attachment-root {
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 4px 10px 0; position: relative; z-index: 30;
-}
+/* ---- Phase 10 附着 UI(注入输入卡片内 textarea 上方 = "Message your agent" 位置;
+       dsh-attachment-ui.js 渲染,shell.css 提供样式) ---- */
+#dsh-attachment-root { position: relative; z-index: 30; }
 body.dsh-sessions #dsh-attachment-root { display: none !important; }
 .dsh-drop-overlay {
   position: fixed; inset: 0; z-index: 100; pointer-events: none;
@@ -490,8 +488,25 @@ body.dsh-sessions #dsh-attachment-root { display: none !important; }
 body.dsh-dragging .dsh-drop-overlay { display: block; }
 .dsh-attach-toolbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-  min-height: 24px;
+  padding: 4px 10px 0;
 }
+.dsh-attach-toolbar[hidden] { display: none; }
+/* 活动文件 / 选区指示:存在 + 开启才渲染(无灰色禁用态);点击切换附着 */
+.dsh-attach-indicator {
+  display: inline-flex; align-items: center; gap: 5px;
+  max-width: 280px; box-sizing: border-box;
+  padding: 2px 10px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--dsh-host-link, var(--dsh-host-accent));
+  color: var(--dsh-host-link, var(--dsh-host-accent));
+  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 12%, var(--dsh-host-bg));
+  font-size: 11px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dsh-attach-indicator:hover {
+  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 20%, var(--dsh-host-bg));
+}
+.dsh-attach-indicator[hidden] { display: none; }
+.dsh-attach-indicator-icon { flex: none; display: inline-flex; }
+.dsh-attach-files { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .dsh-attach-chip {
   display: inline-flex; align-items: center; gap: 4px;
   max-width: 240px; box-sizing: border-box;
@@ -501,15 +516,6 @@ body.dsh-dragging .dsh-drop-overlay { display: block; }
   color: var(--dsw-alias-label-secondary, var(--dsh-host-fg));
   font-size: 11px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.dsh-attach-toggle { cursor: pointer; }
-.dsh-attach-toggle:hover { background: var(--dsh-host-hover); }
-.dsh-attach-toggle.on {
-  border-color: var(--dsh-host-link, var(--dsh-host-accent));
-  color: var(--dsh-host-link, var(--dsh-host-accent));
-  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 12%, var(--dsh-host-bg));
-}
-.dsh-attach-toggle.disabled { opacity: 0.45; cursor: default; }
-.dsh-attach-toggle.disabled:hover { background: var(--dsh-host-bg); }
 .dsh-attach-file { max-width: 200px; }
 .dsh-attach-file.warning { border-color: var(--dsh-host-warn); color: var(--dsh-host-warn); }
 .dsh-attach-remove {

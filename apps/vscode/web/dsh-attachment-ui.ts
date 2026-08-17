@@ -154,12 +154,32 @@ const formatSize = (bytes: number): string => {
 const formatRanges = (selections: readonly SelectionSummaryState[]): string =>
   selections.map((s) => s.startLine + '-' + s.endLine).join(', ');
 
+/** 取路径的文件名(相对/绝对/untitled uri 都适用;Windows 反斜杠兼容) */
+const basenameOf = (path: string): string => {
+  const normalized = path.split(/[/\\]/).filter((seg) => seg !== '');
+  return normalized.length > 0 ? normalized[normalized.length - 1]! : path;
+};
+
 /** 输入区上方注入工具栏根(composer 未就绪返回 null;根已在 DOM 则复用) */
+/** 图标(自绘 outline SVG;静态数据,非用户输入,可安全 innerHTML) */
+const FILE_ICON_SVG =
+  '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true">'
+  + '<path d="M3 1.5h6l4 4v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z"/>'
+  + '<path d="M9 1.5v4h4"/></svg>';
+const SELECTION_ICON_SVG =
+  '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+  + '<path d="M2.5 4h11M2.5 8h11M2.5 12h6"/>'
+  + '<path d="M12.5 9.5v4.5l1.8-1.4 1.7 1.4v-4.5"/></svg>';
+
+/** 输入卡片内、textarea 上方注入附着条(与上游图片附件 rail 同层,即
+ *  "Message your agent" 输入框的位置);composer 未就绪返回 null;根已在 DOM 则复用。 */
 function ensureRoot(): HTMLElement | null {
   if (document.body.classList.contains('dsh-sessions')) return null;
   if (root !== null && root.isConnected) return root;
   const card = document.querySelector('[data-composer-card]');
-  if (card === null || card.parentElement === null) return null;
+  if (card === null) return null;
+  const scroll = card.querySelector('[data-input-scroll]');
+  const anchor = scroll ?? card.firstElementChild;
   root = document.createElement('div');
   root.id = 'dsh-attachment-root';
   root.className = 'dsh-attachment-root';
@@ -170,63 +190,97 @@ function ensureRoot(): HTMLElement | null {
   const toolbar = document.createElement('div');
   toolbar.className = 'dsh-attach-toolbar';
   toolbar.setAttribute('data-dsh-attach-toolbar', '');
-  const activeBtn = document.createElement('button');
-  activeBtn.type = 'button';
-  activeBtn.className = 'dsh-attach-chip dsh-attach-toggle';
-  activeBtn.setAttribute('data-kind', 'activeFile');
-  const selBtn = document.createElement('button');
-  selBtn.type = 'button';
-  selBtn.className = 'dsh-attach-chip dsh-attach-toggle';
-  selBtn.setAttribute('data-kind', 'selection');
+  toolbar.hidden = true;
+  // 活动文件指示:开启 + 有活动编辑器才显示(icon + 文件名);点击切换附着
+  const activeIndicator = document.createElement('button');
+  activeIndicator.type = 'button';
+  activeIndicator.className = 'dsh-attach-indicator';
+  activeIndicator.setAttribute('data-kind', 'activeFile');
+  activeIndicator.hidden = true;
+  const activeIcon = document.createElement('span');
+  activeIcon.className = 'dsh-attach-indicator-icon';
+  activeIcon.innerHTML = FILE_ICON_SVG;
+  const activeName = document.createElement('span');
+  activeName.className = 'dsh-attach-indicator-name';
+  activeIndicator.append(activeIcon, activeName);
+  activeIndicator.addEventListener('click', () => {
+    if (lastState === null) return;
+    postToHost({ type: 'dsh:attachments:toggle', kind: 'activeFile', enabled: !lastState.activeFileEnabled });
+  });
+  // 选区指示:开启 + 有非空选区才显示(icon + N lines selected);点击切换附着
+  const selectionIndicator = document.createElement('button');
+  selectionIndicator.type = 'button';
+  selectionIndicator.className = 'dsh-attach-indicator';
+  selectionIndicator.setAttribute('data-kind', 'selection');
+  selectionIndicator.hidden = true;
+  const selectionIcon = document.createElement('span');
+  selectionIcon.className = 'dsh-attach-indicator-icon';
+  selectionIcon.innerHTML = SELECTION_ICON_SVG;
+  const selectionLines = document.createElement('span');
+  selectionLines.className = 'dsh-attach-indicator-lines';
+  selectionIndicator.append(selectionIcon, selectionLines);
+  selectionIndicator.addEventListener('click', () => {
+    if (lastState === null) return;
+    postToHost({ type: 'dsh:attachments:toggle', kind: 'selection', enabled: !lastState.selectionEnabled });
+  });
   const files = document.createElement('span');
   files.className = 'dsh-attach-files';
   files.setAttribute('data-dsh-attach-files', '');
   const toast = document.createElement('div');
   toast.className = 'dsh-attach-toast';
   toast.hidden = true;
-  toolbar.append(activeBtn, selBtn, files);
+  toolbar.append(activeIndicator, selectionIndicator, files);
   root.append(overlay, toolbar, toast);
-  activeBtn.addEventListener('click', () => {
-    if (lastState === null) return;
-    postToHost({ type: 'dsh:attachments:toggle', kind: 'activeFile', enabled: !lastState.activeFileEnabled });
-  });
-  selBtn.addEventListener('click', () => {
-    if (lastState === null) return;
-    postToHost({ type: 'dsh:attachments:toggle', kind: 'selection', enabled: !lastState.selectionEnabled });
-  });
-  card.parentElement.insertBefore(root, card);
+  card.insertBefore(root, anchor);
   return root;
+}
+
+/** 选区总行数(多光标求和;1-based 行号差 +1,单行计 1) */
+function selectionLineCount(selections: readonly SelectionSummaryState[]): number {
+  let total = 0;
+  for (const s of selections) total += Math.max(s.endLine - s.startLine + 1, 1);
+  return total;
 }
 
 function renderState(state: AttachmentState): void {
   lastState = state;
   const el = ensureRoot();
   if (el === null || !el.isConnected) return;
-  const activeBtn = el.querySelector('.dsh-attach-toggle[data-kind="activeFile"]');
-  const selBtn = el.querySelector('.dsh-attach-toggle[data-kind="selection"]');
+  const toolbar = el.querySelector('.dsh-attach-toolbar');
+  const activeIndicator = el.querySelector('.dsh-attach-indicator[data-kind="activeFile"]');
+  const selectionIndicator = el.querySelector('.dsh-attach-indicator[data-kind="selection"]');
   const files = el.querySelector('.dsh-attach-files');
-  if (activeBtn instanceof HTMLButtonElement) {
-    const on = state.activeFileEnabled;
-    const available = state.activeFileAvailable;
-    activeBtn.classList.toggle('on', on);
-    activeBtn.classList.toggle('disabled', !available);
-    activeBtn.disabled = !available;
-    activeBtn.title = str('附着活动文件(含未保存改动)', 'Attach active file (includes unsaved edits)');
-    let label = str('附着文件', 'Active File');
-    if (on && state.activeFile !== undefined) label += ': ' + state.activeFile.path + (state.activeFile.isDirty ? ' •' : '');
-    activeBtn.textContent = label;
+  let hasContent = false;
+  // 活动文件指示:存在 + 开启才显示;不存在/关闭则完全不显示(无灰色禁用态)
+  if (activeIndicator instanceof HTMLButtonElement) {
+    const show = state.activeFileEnabled && state.activeFileAvailable && state.activeFile !== undefined;
+    activeIndicator.hidden = !show;
+    if (show && state.activeFile !== undefined) {
+      const nameEl = activeIndicator.querySelector('.dsh-attach-indicator-name');
+      const dirty = state.activeFile.isDirty ? ' •' : '';
+      if (nameEl !== null) nameEl.textContent = basenameOf(state.activeFile.path) + dirty;
+      activeIndicator.title =
+        state.activeFile.path
+        + (state.activeFile.isDirty ? ' · ' + str('未保存', 'unsaved') : '')
+        + ' · ' + str('点击关闭附着', 'click to detach');
+      hasContent = true;
+    }
   }
-  if (selBtn instanceof HTMLButtonElement) {
-    const on = state.selectionEnabled;
-    const available = state.selectionAvailable;
-    selBtn.classList.toggle('on', on);
-    selBtn.classList.toggle('disabled', !available);
-    selBtn.disabled = !available;
-    selBtn.title = str('附着选中内容(含行列)', 'Attach selection (with ranges)');
-    let label = str('附着选区', 'Selection');
-    if (on && state.selections.length > 0) label += ': ' + formatRanges(state.selections);
-    selBtn.textContent = label;
+  // 选区指示:存在 + 开启才显示
+  if (selectionIndicator instanceof HTMLButtonElement) {
+    const show = state.selectionEnabled && state.selectionAvailable && state.selections.length > 0;
+    selectionIndicator.hidden = !show;
+    if (show) {
+      const linesEl = selectionIndicator.querySelector('.dsh-attach-indicator-lines');
+      const lines = selectionLineCount(state.selections);
+      if (linesEl !== null) {
+        linesEl.textContent = lines === 1 ? '1 line selected' : lines + ' lines selected';
+      }
+      selectionIndicator.title = formatRanges(state.selections) + ' · ' + str('点击关闭附着', 'click to detach');
+      hasContent = true;
+    }
   }
+  // 拖入文件 chip
   if (files instanceof HTMLElement) {
     files.textContent = '';
     for (const a of state.attachments) {
@@ -246,8 +300,10 @@ function renderState(state: AttachmentState): void {
       });
       chip.append(name, remove);
       files.append(chip);
+      hasContent = true;
     }
   }
+  if (toolbar instanceof HTMLElement) toolbar.hidden = !hasContent;
 }
 
 /* ---- 错误 toast ---- */
