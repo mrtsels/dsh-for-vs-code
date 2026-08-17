@@ -500,10 +500,19 @@ export function activate(context: vscode.ExtensionContext): void {
   // 活动栏 view = WebviewViewProvider:点击图标直接在侧边栏渲染 dsh 原生 UI
   disposables.add(vscode.window.registerWebviewViewProvider(ChatPanel.viewType, chatPanelHost));
 
-  // P0-1:重试连接命令(状态栏点击同入口);状态栏 command 绑定
+  // P0-1:重试连接命令(状态栏点击同入口);状态栏 command 绑定。
+  // 弹窗附诊断信息(UI rev / VS Code locale / 实例 locale),供用户确认加载版本
   const retryConnection = (): void => {
-    void runtime.connect().then(() => {
-      void vscode.window.showInformationMessage('DeepSeek Harness:已连接');
+    void runtime.connect().then((desc) => {
+      const shellRev = readUiShellRev(context);
+      const vscLocale = vscode.workspace.getConfiguration('deepseekHarness').get<string>('locale', 'follow-web');
+      void readInstanceLocale(
+        vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+      ).then((instanceLocale) => {
+        void vscode.window.showInformationMessage(
+          `✅ 已连接 dsh ${desc.version} · cwd=${desc.cwd}\nUI rev=${shellRev}\nVS Code locale=${vscLocale} · 实例 locale=${instanceLocale ?? '(未知)'}`,
+        );
+      });
     });
   };
   disposables.add(vscode.commands.registerCommand('deepseekHarness.retryConnection', retryConnection));
@@ -587,6 +596,20 @@ export function activate(context: vscode.ExtensionContext): void {
     const created = await postRpc(current, 'session.create', { workspaceId: ws.workspaceId });
     const sessionId = (created?.result?.value as { sessionId?: string } | undefined)?.sessionId;
     return typeof sessionId === 'string' ? sessionId : undefined;
+  };
+
+  // 读实例 locale.preference(诊断用;失败 undefined)
+  const readInstanceLocale = async (current: string): Promise<string | undefined> => {
+    try {
+      const body = await postRpc(current, 'settings.describe', {});
+      const namespaces = (body?.result?.value as
+        | { namespaces?: Array<{ ns: string; value?: Record<string, unknown> }> }
+        | undefined)?.namespaces;
+      const value = namespaces?.find((n) => n.ns === 'locale')?.value?.preference;
+      return typeof value === 'string' ? value : undefined;
+    } catch {
+      return undefined;
+    }
   };
 
   // 语言强制对齐:读实例 locale.preference,与目标不一致则 settings.update 写回
