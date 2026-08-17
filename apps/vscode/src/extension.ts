@@ -41,7 +41,7 @@ interface ChatPanelHost {
   reload: (baseUrl: string) => void;
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const disposables = new DisposableSet();
   const logger = new Logger('DeepSeek Harness');
   const baseUrl = vscode.workspace
@@ -72,9 +72,13 @@ export function activate(context: vscode.ExtensionContext): void {
   const proxy = new HttpProxy(
     vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
   );
-  void proxy.start().catch((error: unknown) => {
+  // 代理必须先就绪再激活完成:webview 打开时(boot 的 settings 读取)若代理未 listen,
+  // 语言快照加载失败 → 语言卡死在浏览器语言。activate async 保证竞态消除。
+  try {
+    await proxy.start();
+  } catch (error: unknown) {
     logger.warn(`代理启动失败:${error instanceof Error ? error.message : String(error)}`);
-  });
+  }
   disposables.add({ dispose: () => void proxy.stop() });
   // 主 UI = 编辑器 WebviewPanel(宽面板容纳 dsh 完整布局,范式对齐社区实践);
   // 活动栏 view 提供"打开"入口节点

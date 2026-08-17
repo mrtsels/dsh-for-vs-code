@@ -607,16 +607,18 @@ const BRIDGE_JS = `(() => {
     }
     syncLocale();
   }, 5000);
-  // 语言硬切换:周期检测 UI 语言,不符则请扩展重载 webview —— boot 时 connection 已就绪,
-  // 上游初始 settings 读取必然成功(运行中推送不可靠,boot 读取可靠)。上限 4 次防循环。
+  // 语言硬切换兜底:boot 后 3s 与 8s 各检测一次,UI 语言仍与设置不符 → 请扩展重载
+  // webview(boot 时代理已就绪 → 上游初始 settings 读取成功)。最多 2 次,扩展侧 30s 防抖。
   let reloadRequests = 0;
-  const localeReloadTimer = window.setInterval(() => {
+  const requestLocaleReload = () => {
     const target = window.__DSH_LOCALE__;
-    if (target !== 'zh' && target !== 'en') { window.clearInterval(localeReloadTimer); return; }
-    if (detectUiLocale() === target || reloadRequests >= 4) { window.clearInterval(localeReloadTimer); return; }
+    if (target !== 'zh' && target !== 'en') return;
+    if (detectUiLocale() === target || reloadRequests >= 2) return;
     reloadRequests += 1;
     postToHost({ type: 'dsh:locale-mismatch' });
-  }, 4000);
+  };
+  window.setTimeout(requestLocaleReload, 3000);
+  window.setTimeout(requestLocaleReload, 8000);
 
   // 5b. 自动诊断:应用 boot 后与视图切换时采集 webview 布局/语言事实,
   // 回传扩展写入本地文件(.dsh-webview-diag.json),便于排查环境差异。
