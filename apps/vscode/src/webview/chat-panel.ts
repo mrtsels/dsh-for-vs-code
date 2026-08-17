@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import type { WebviewRequest } from './bridge.js';
 import type { ExtensionMessage } from './bridge.js';
 import { Logger } from '../util/logger.js';
+import { assembleShellHtml } from './shell-html.js';
 
 export interface ChatPanelHost {
   open: () => Promise<void>;
@@ -138,19 +139,8 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     const proxyWs = proxyBase.replace(/^http/, 'ws');
     // base href 必须指向产物根目录(joinPath 带 '.' 会生成畸形 base → 相对 URL 全 404)
     const baseHref = webview.asWebviewUri(shellDir) + '/';
-    const bootJs = readFileSync(
-      vscode.Uri.joinPath(shellDir, 'boot.js').fsPath,
-      'utf8',
-    ).replace(/<\/script>/gi, '<\\/script>');
+    const bootJs = readFileSync(vscode.Uri.joinPath(shellDir, 'boot.js').fsPath, 'utf8');
     const shellHtml = readFileSync(vscode.Uri.joinPath(shellDir, 'index.html').fsPath, 'utf8');
-    const cspMeta =
-      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${csp} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval' ${csp}; img-src ${csp} data: blob:; font-src ${csp} data:; connect-src http://127.0.0.1:3080 ws://127.0.0.1:3080 ${proxyBase} ${proxyWs}; worker-src ${csp} blob:;" />`;
-    // 注入点:head 内插 CSP/base;body 开标签后插 __DSH_WEB_URL__ + boot(先于模块脚本)
-    return shellHtml
-      .replace(/<head>/i, `<head>${baseHref ? `<base href="${baseHref}" />` : ''}${cspMeta}`)
-      .replace(/<body[^>]*>/i, (m) =>
-        `${m}<script nonce="${nonce}">window.__DSH_WEB_URL__ = '${proxyBase}';</script>`
-        + `<script nonce="${nonce}">${bootJs}</script>`,
-      );
+    return assembleShellHtml({ shellHtml, bootJs, csp, nonce, baseHref, proxyBase, proxyWs });
   }
 }
