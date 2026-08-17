@@ -54,6 +54,19 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
 - **mux 存在二进制帧**:上游客户端(rc.5/rc.6 一致)丢弃非文本帧,属已知行为非回归;UI 依赖的帧均为文本
 - `/plugins/events`(HMR dev SSE)在无 dev server 时 404,无害
 - 上游 rc.5 源码构建产物与 rc.6 npm 产物字节级一致(实测),UI 侧协议漂移风险低;升级仍须全量回归
+- **Phase 9 布局缝**(build-web-shell.mjs):对话模式 frame 网格强制 `0|1fr|0`(隐藏侧边栏/详情列,
+  拖拽条一并隐藏);Workspaces 模式 `#root` 撑宽 `max(1100px,100vw)`(> SIDEBAR_AUTO_COLLAPSE=1024
+  触发 AppFrame 非窄布局 → 侧边栏渲染宽版浏览器),窄视口下中心列 0 宽(media query)、宽视口正常双列
+- **返回按钮不可插入 React 子树**(实测):上游组件重渲染会清除外部注入节点,点击随即失效;
+  改为 body 直接子元素的固定悬浮按钮(z-index 1000),title 行 `padding-left: 36px` 让位
+- **heroGlow 是硬编码 SVG 色**(#6187D8,不读 token):去掉底色后仍透蓝光,shell.css 用
+  `[class$="_heroGlow"] ellipse { fill: var(--dsh-host-fg) !important; }` 覆盖(fill 属性可被 CSS 覆盖)
+- **主题 token 三层**:上游 ThemePresenter 会把主题 token 写成 body 内联变量(压过普通样式表),
+  shell.css 的映射必须 `!important`;body 有 `data-ds-dark-theme` 属性选择器时映射要双写
+- **会话历史里的错误卡片是数据**:smoke 的白屏检测看 rootChildren + pageerror,勿用 `[class*="error"]`
+  判断 UI 故障(上游正确渲染会话内错误消息)
+- 设置写回统一走 `settings.update({ns, patch})`(上游 store 同款);`settings.mutate` 载荷不同,勿混用;
+  permission 命名空间 schema 只有 `defaultPreset` 可写(`preference` 是运行态镜像,写了无效)
 
 ## 执行
 

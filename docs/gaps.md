@@ -13,6 +13,25 @@
   与旧路线一致;Phase 6 裁剪时评估是否移除 hmr。
 - **全量插件图(39)有 slot 双注册冲突**:`conversation.hero.workspace.directoryFlow`(ui-workspace ×
   ui-directory-picker-browse/native,priority 0)。上游浏览器同图同错(非致命,pageerror 级);
+
+## Phase 9 UI/UX 定制实测发现(2026-08-18,headless E2E + vision 截图验证)
+
+- **裁剪图 28→29(恢复 ui-plan)**:对话面板需要 Mode(计划)控制;Todo 面板属 ui-conversation
+  自带(todoDockEntry),不依赖 ui-plan;其余裁剪不变。参考图 ref-graph-rc6.json 同步更新。
+- **返回按钮不能插入 React 子树**:上游组件重渲染会清除外部注入的按钮(点击随即失效,用户实测)。
+  改为 body 直接子元素的 fixed 悬浮按钮 + title 行 padding-left 让位;hero(空会话)场景同样适用。
+- **Workspaces 页撑宽方案**:`#root width: max(1100px, 100vw)` 让 AppFrame 判定非窄布局
+  (SIDEBAR_AUTO_COLLAPSE=1024)→ 侧边栏渲染宽版工作区浏览器;窄视口(<1100)中心列 0 宽
+  (media query),宽视口(编辑器面板)正常双列 —— 两种场景均无错位。
+- **heroGlow 硬编码 #6187D8**(SVG 属性,不读 token):去底色后透蓝光;CSS `fill` 覆盖为宿主
+  前景色后中性化(保留 0.08 透明度)。FishLogo 走 currentColor,无此问题。
+- **上游 ThemePresenter 把主题 token 写 body 内联变量**(压过样式表):shell.css 映射必须
+  `!important` 且 light/dark 双写(`body, body[data-ds-dark-theme]`)。
+- **permission 命名空间 schema 只有 defaultPreset 可写**;`preference` 是运行态镜像字段
+  (settings.describe 里 value 同时含两者,但 schema dict 仅 defaultPreset)——旧实现写
+  preference 实际无效,Phase 9 修正为写 defaultPreset。
+- **会话历史中的错误卡片是数据不是故障**:上游正确渲染会话内错误消息(如 tool 调用失败),
+  smoke 白屏检测改用 rootChildren + pageerror。
   Phase 6 裁剪排除 directory-picker-* 后消失。
 
 

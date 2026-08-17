@@ -4,7 +4,7 @@ DeepSeek Harness 的 VS Code 客户端。复用上游 [deepseek-harness](https:/
 
 ## 当前状态
 
-**Route A(源码构建)已落地:UI = dsh 上游原生 React 组件,从锁定 rev 的 vendor 源码构建装配(Phase 5–6 完成,Phase 7 清理/回归中)。** 开发契约(红线、规范、协议、坑)见 [AGENTS.md](AGENTS.md);完整任务书与进度见 [TASK.md](TASK.md);协议缺口与降级见 [docs/gaps.md](docs/gaps.md)。
+**Route A(源码构建)已落地:UI = dsh 上游原生 React 组件,从锁定 rev 的 vendor 源码构建装配(Phase 5–6 ✅,Phase 7 清理 ✅,Phase 9 UI/UX 定制 ✅)。** 开发契约(红线、规范、协议、坑)见 [AGENTS.md](AGENTS.md);完整任务书与进度见 [TASK.md](TASK.md);协议缺口与降级见 [docs/gaps.md](docs/gaps.md);手动测试清单见 [docs/manual-tests/](docs/manual-tests/)。
 
 实现路线:**插件是现有 `dsh web` 实例的客户端**(映射 127.0.0.1:3080 的同一 runtime,不另起实例、不内嵌 runtime)。UI 装配链:
 
@@ -22,13 +22,15 @@ dsh web 实例 @ 127.0.0.1:3080(同一 runtime,第 N 个 viewer)
 
 ## 功能一览
 
-- **Chat 面板(上游原生 UI)**:流式回答、工具调用、会话/工作区选择、模型/权限状态;侧边栏形态(280px 布局 + 折叠)
+- **Chat 面板(上游原生 UI,Phase 9 定制)**:仅对话面板(session title/子代理/后台任务/Mode/Chat/Trajectory/Todo/Goal);左上角返回按钮 → Workspaces 对话管理页(原侧边栏内容独立页面,窄侧边栏/宽面板自适应)
+- **主题同步**:上游 --dsw-* 语义色全量映射 VS Code 主题变量,跟随 VS Code 配色(侧边栏/编辑器面板区分底色)
+- **首开体验**:首次打开(或新文件夹)自动进入以当前工作区为 workspace 的新会话
+- **设置映射**:agentPreset / permissionMode / locale / theme / busyEnter 与 dsh 实例设置一一对应、双向同步,真实可改
 - **改动审查**:agent 写盘被快照捕获 → diff 面板 → 一键回滚/接受(`DeepSeek Harness: Review Changes`)
 - **编辑器上下文**:Ask 时自动注入当前文件/选区/诊断;问 git 时注入工作区改动摘要
 - **审批**:工具请求执行时弹出原生通知(允许一次/拒绝)
 - **终端**:面板内"终端"输入命令,输出可捕获回传 UI
 - **原生入口**:VS Code Chat 面板(`@DeepSeek Harness` participant)、编辑器右键"dsh: 解释选中代码 / Ask to fix 诊断"、Code Actions
-- **原生层会话/设置**:Sessions 树(新建/切换/刷新)、权限三档、语言/主题 follow-web
 - **连接管理**:`DeepSeek Harness: 切换实例地址`(默认 http://127.0.0.1:3080;代理端口不变,转发重定向)
 
 ## 安装与使用

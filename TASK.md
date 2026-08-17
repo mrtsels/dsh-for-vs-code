@@ -1,9 +1,12 @@
 # TASK.md — dsh-for-vs-code 实施任务书(2026-08-17 重写:Route A 源码构建路线)
 
-> **进度快照(2026-08-17 10:31)**:Phase 5 ✅(源码构建打通,产物与 rc.6 字节级一致)、
-> Phase 6 ✅(定制 boot 图 39→28 + 静态侧边栏融合 + 代理重定向 + 会话切换桥)、
-> Phase 7 🔶(P7-2/3/4 ✅ 已提交;P7-1 功能回归待用户按 docs/manual-tests/phase-5.md 执行)、
-> Phase 8 🔶(P8-1 G1 ✅ PASS;P8-2 G2 与 P8-3 tag 待 P7-1 人工回归后)。
+> **进度快照(2026-08-18 Phase 9)**:Phase 5 ✅ / 6 ✅ / 7 🔶(P7-1 人工回归待用户)/ 8 🔶(G1 PASS)。
+> **Phase 9(UI/UX 定制)**:P9-1 ✅(仅对话面板 + Workspaces 页;返回按钮改 body 固定悬浮,
+> React 重渲染不清除)、P9-2 ✅(仅 Chat 视图)、P9-3 ✅(--dsw-* 全量映射 VS Code 变量 +
+> heroGlow 蓝色 SVG 覆盖)、P9-4 ✅(bootstrap 模块 + __DSH_BOOT_SESSION__)、
+> P9-5 ✅(设置桥:agentPreset/busyEnter 新增,permission 修正 defaultPreset,双向轮询)、
+> P9-6 ✅(G0 四门 + @live 57/57 + smoke PASS + vision 验证三视图)。
+> 待用户:扩展宿主窗口视觉确认(双击 启动扩展.command)。
 
 > 本版重写原因(2026-08-17 用户决策):
 >
@@ -133,6 +136,24 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 - [x] P8-1 G1 审查(Phase 5+6):docs/reviews/phase-5.md **PASS**(主代理出具,证据实测;独立子代理两轮超时)
 - [ ] P8-2 G2 交付门(全量回归:docs/manual-tests/phase-5.md 全项 + G0 + smoke-shell)
 - [ ] P8-3 tag + 发布文档
+
+### Phase 9:UI/UX 定制(2026-08-18 用户需求)
+
+- [x] P9-1 布局:侧边栏隐藏,仅对话面板(session title/子代理/后台任务/Mode/Chat/Trajectory/对话内容/Todo/Goal/message block);
+      返回按钮(左上角,title 行 padding 让位)→ Workspaces 对话管理页(侧边栏内容独立页面;
+      窄 webview 侧边栏整页、宽 webview 浏览器布局自适应;点会话/新建后自动返回)
+- [x] P9-2 视图精简:VS Code 侧边栏只保留 Chat webview,移除 Sessions 树视图(会话管理移入 webview Workspaces 页)
+- [x] P9-3 主题同步:shell.css 将上游 --dsw-alias/--dsw-specific 语义色全部映射到 VS Code 主题变量
+      (--vscode-*,宿主变量 sideBar/editor 区分);data-ds-dark-theme 跟随 VS Code 主题(matchMedia 强制);
+      heroGlow 硬编码 #6187D8 → 宿主前景色(蓝光消除)
+- [x] P9-4 首开体验:扩展首次激活(或新文件夹无会话时)自动 ensureWorkspace(当前文件夹)
+      + 复用/新建 blank 会话 → __DSH_BOOT_SESSION__ 注入(boot 桥仅在 localStorage 无 current 时写入);
+      ready 时补发 dsh:bootstrap-session(竞态兜底)
+- [x] P9-5 设置映射:agentPreset → agent-presets.default(名册校验 + QuickPick 命令);
+      permission → permission.defaultPreset(修正原 preference 写法);locale/theme → 既有;
+      busyEnter → ui-conversation.busyEnter;双向同步(设置变更推实例 + 可见时 5s 轮询回写,抑制回环)
+- [x] P9-6 G0 四门绿(typecheck/lint 0/test 55+@live 57/build)+ smoke-shell 布局断言全 PASS
+      (侧栏 0 宽/返回按钮 body 直接子节点/Workspaces 页切换/自动返回)+ 三视图截图 vision 验证
 
 ## 4. 阶段门与验收(沿用)
 
