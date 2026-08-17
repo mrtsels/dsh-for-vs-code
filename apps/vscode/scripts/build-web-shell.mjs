@@ -518,7 +518,7 @@ const BRIDGE_JS = `(() => {
         let view = 'chat';
         try { view = localStorage.getItem(VIEW_KEY) === 'workspaces' ? 'workspaces' : 'chat'; } catch (err) {}
         setView(view);
-        // 语言对齐:等 connection 就绪后执行(延迟 2s)
+        // 语言对齐:等 connection 就绪后执行(延迟 2s;之后周期重试)
         window.setTimeout(syncLocale, 2000);
         if (typeof MutationObserver !== 'undefined') {
           const observer = new MutationObserver(() => {
@@ -552,12 +552,14 @@ const BRIDGE_JS = `(() => {
       headers: { 'content-type': 'application/json' },
       body: envelope('settings.update', { ns: 'locale', patch: { preference: value } }),
     });
+  // rpcId 必须唯一:同 rpcId 的重复请求会被服务端忽略(双写第二笔会丢)
+  const rpcId = () => 'bridge-locale-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   const syncLocale = () => {
     const target = window.__DSH_LOCALE__;
     if (target !== 'zh' && target !== 'en') return;
     const base = window.__DSH_WEB_URL__;
     if (typeof base !== 'string' || base === '') return;
-    const envelope = (method, payload) => JSON.stringify({ type: 'client-request', rpcId: 'bridge-locale', method, payload });
+    const envelope = (method, payload) => JSON.stringify({ type: 'client-request', rpcId: rpcId(), method, payload });
     fetch(base + '/api/settings.describe', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -567,20 +569,44 @@ const BRIDGE_JS = `(() => {
       const current = Array.isArray(namespaces)
         ? namespaces.find((n) => n.ns === 'locale')?.value?.preference
         : undefined;
-      if (detectUiLocale() === target) return; // UI 已是目标语言,无需干预
+      const outcome = { at: Date.now(), target, current, ui: detectUiLocale() };
+      if (detectUiLocale() === target) {
+        outcome.done = true;
+        window.dshDiag = outcome;
+        postToHost({ type: 'dsh:diag', payload: { ...collectDiag(), syncOutcome: outcome } });
+        return; // UI 已是目标语言,无需干预
+      }
       if (current !== target) {
         await updateLocale(base, envelope, target); // 值不同:一次写即触发推送
+        outcome.step = 'single-write';
       } else {
         // 值相同但 UI 不符(boot 快照未加载):双写对调值再写回,强制推送触发上游 refresh
         const other = target === 'zh' ? 'en' : 'zh';
         await updateLocale(base, envelope, other);
         await updateLocale(base, envelope, target);
+        outcome.step = 'double-write';
       }
+      outcome.done = false;
+      window.dshDiag = outcome;
+      postToHost({ type: 'dsh:diag', payload: { ...collectDiag(), syncOutcome: outcome } });
     }).catch((err) => {
-      // 实例不可达:静默,语言保持当前(下次 reload 再试)
-      console.error('[dsh-bridge] locale sync:', String(err));
+      // 实例不可达:静默记录,下次周期重试
+      const outcome = { at: Date.now(), target, error: String(err) };
+      window.dshDiag = outcome;
+      postToHost({ type: 'dsh:diag', payload: { ...collectDiag(), syncOutcome: outcome } });
     });
   };
+  // 周期重试:每 5s 直到 UI 语言与目标一致(上限 6 次,避免无限打扰)
+  let syncAttempts = 0;
+  const syncTimer = window.setInterval(() => {
+    syncAttempts += 1;
+    const target = window.__DSH_LOCALE__;
+    if (detectUiLocale() === target || syncAttempts > 6) {
+      window.clearInterval(syncTimer);
+      return;
+    }
+    syncLocale();
+  }, 5000);
 
   // 5b. 自动诊断:应用 boot 后与视图切换时采集 webview 布局/语言事实,
   // 回传扩展写入本地文件(.dsh-webview-diag.json),便于排查环境差异。

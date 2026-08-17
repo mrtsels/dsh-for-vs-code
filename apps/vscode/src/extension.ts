@@ -4,7 +4,7 @@
  * Pseudoterminal 终端、改动审查面板(方案 a)。
  */
 import * as vscode from 'vscode';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { HarnessRuntime } from './agent/runtime.js';
 import { SessionManager } from './agent/session-manager.js';
 import { AgentController } from './agent/controller.js';
@@ -304,6 +304,7 @@ export function activate(context: vscode.ExtensionContext): void {
       // 会话管理页点 workspace 行/其 + 按钮 → 跳转到该 workspace(跳转非派生)
       case 'dsh:open-workspace': {
         const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
+        appendDiagLog({ evt: 'open-workspace', title: request.title, newSession: request.newSession === true, at: Date.now() });
         try {
           const sessionId = await openWorkspaceSession(current, request.title, request.newSession === true);
           if (sessionId === undefined) throw new Error('工作区不可达或实例未就绪');
@@ -605,6 +606,19 @@ export function activate(context: vscode.ExtensionContext): void {
     const created = await postRpc(current, 'session.create', { workspaceId: ws.workspaceId });
     const sessionId = (created?.result?.value as { sessionId?: string } | undefined)?.sessionId;
     return typeof sessionId === 'string' ? sessionId : undefined;
+  };
+
+  // 追加一行诊断事件到 .dsh-webview-diag.events.json(排查跳转/交互)
+  const appendDiagLog = (entry: Record<string, unknown>): void => {
+    try {
+      const diagPath = vscode.Uri.joinPath(vscode.Uri.file(workspaceRoot || '.'), '.dsh-webview-diag.events.json');
+      const prev = existsSync(diagPath.fsPath) ? readFileSync(diagPath.fsPath, 'utf8') : '[]';
+      const list = JSON.parse(prev) as unknown[];
+      list.push(entry);
+      writeFileSync(diagPath.fsPath, JSON.stringify(list, null, 1) + '\n');
+    } catch (error) {
+      logger.warn(`诊断事件写入失败:${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   // 读实例 locale.preference(诊断用;失败 undefined)
