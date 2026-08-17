@@ -547,25 +547,25 @@ function SessionRowView({
   return (
     <div className="dsh-session-row-wrap">
       <div className="dsh-session-row-line">
-        <button
-          type="button"
-          className={'dsh-session-child-toggle' + (hasChildren ? '' : ' dsh-session-child-toggle--empty')}
-          onClick={() => onToggleChildren(row.sessionId)}
-          aria-expanded={hasChildren ? expanded : undefined}
-          aria-label={hasChildren ? str('折叠子代理', 'Collapse subagents') : undefined}
-          tabIndex={hasChildren ? 0 : -1}
-        >
-          {hasChildren && (
-            <span className={'dsh-session-child-arrow' + (expanded ? ' dsh-session-child-arrow--open' : '')}>
-              <TriangleRightIcon />
-            </span>
-          )}
-        </button>
         <button type="button" className={rowCls} onClick={() => onOpen(row.sessionId)}>
           <span className="dsh-session-dot-slot">
             {row.running && <span className="dsh-session-dot" aria-hidden="true" />}
           </span>
-          <span className="dsh-session-title">{row.title !== '' ? row.title : str('新会话', 'New session')}</span>
+          <span className="dsh-session-title-group">
+            <span className="dsh-session-title">{row.title !== '' ? row.title : str('新会话', 'New session')}</span>
+            {hasChildren && (
+              <span
+                className={'dsh-session-inline-chevron' + (expanded ? ' dsh-session-inline-chevron--open' : '')}
+                aria-hidden="true"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleChildren(row.sessionId);
+                }}
+              >
+                <TriangleRightIcon />
+              </span>
+            )}
+          </span>
           <span className="dsh-session-meta">
             {row.running && <span className="dsh-session-status">{str('进行中', 'Running')}</span>}
             {!row.blank && <span className="dsh-session-time">{timeLabel(row.updatedAt, Date.now())}</span>}

@@ -341,7 +341,7 @@ body, body[data-ds-dark-theme] {
 .dsh-session-row {
   display: flex; align-items: center; gap: 8px;
   width: 100%; min-width: 0; box-sizing: border-box;
-  padding: 7px 8px 7px 30px; border: none; border-radius: 6px;
+  padding: 7px 8px 7px 10px; border: none; border-radius: 6px;
   background: transparent; color: var(--dsw-alias-label-primary, var(--dsh-host-fg));
   font: inherit; font-size: 13px; text-align: left; cursor: pointer;
 }
@@ -368,17 +368,17 @@ body, body[data-ds-dark-theme] {
 /* ---- 子代理嵌套 + 行操作菜单 + 重命名对话框 + 错误横幅(2026-08-20 P1) ---- */
 .dsh-session-row-wrap { display: flex; flex-direction: column; }
 .dsh-session-row-line { display: flex; align-items: center; min-width: 0; }
-.dsh-session-child-toggle {
+.dsh-session-title-group {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px;
+}
+.dsh-session-inline-chevron {
   flex: none; display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 26px; border: none; background: transparent; padding: 0;
-  color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg)); cursor: pointer; border-radius: 4px;
+  width: 16px; height: 16px; border-radius: 4px;
+  color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg)); cursor: pointer;
 }
-.dsh-session-child-toggle:hover { background: var(--dsh-host-hover); }
-.dsh-session-child-toggle--empty { cursor: default; visibility: hidden; }
-.dsh-session-child-arrow {
-  display: inline-flex; width: 14px; height: 14px; transition: transform 0.15s ease;
-}
-.dsh-session-child-arrow--open { transform: rotate(90deg); }
+.dsh-session-inline-chevron:hover { background: var(--dsh-host-hover); color: var(--dsh-host-fg); }
+.dsh-session-inline-chevron svg { transition: transform 0.15s ease; }
+.dsh-session-inline-chevron--open svg { transform: rotate(90deg); }
 .dsh-session-children { padding-left: 24px; display: flex; flex-direction: column; }
 .dsh-session-more {
   flex: none; display: inline-flex; align-items: center; justify-content: center;
