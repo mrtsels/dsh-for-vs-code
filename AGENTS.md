@@ -62,7 +62,11 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
   MutationObserver(rAF)重插 + document capture 事件委托(按钮移除瞬间点击仍命中);
   空会话 hero 无 title 行 → fixed 悬浮兜底;Workspaces 页顶部 fixed 返回
 - **Workspaces 全宽需要双重覆盖**:frame 网格 `minmax(0,1fr) 0px 0px` 之外,SidebarRoot
-  根元素还有上游内联 `width: 280px`(拖拽偏好)→ 必须 `[class$="_sidebarCol"] > [class$="_root"] { width: auto !important }` 才真正撑满
+  根元素还有上游内联 `width: 280px`(拖拽偏好)→ 用
+  `[class$="_sidebarCol"] [class*="_root "] { width: 100% !important }` 覆盖
+- **`[class$="x"]` 匹配整个 class 属性值**(CSS 属性选择器语义):多类元素(root+quietBars)
+  整值以 quietBars 结尾,`[class$="_root"]` 会漏匹配 —— 用 `[class*="_root "]`(词尾含空格)
+  精准匹配"以 _root 结尾的类";这是 SidebarRoot 撑满问题的根因
 - **heroGlow 是硬编码 SVG 色**(#6187D8,不读 token):去掉底色后仍透蓝光,shell.css 用
   `[class$="_heroGlow"] ellipse { fill: var(--dsh-host-fg) !important; }` 覆盖(fill 属性可被 CSS 覆盖)
 - **主题 token 三层**:上游 ThemePresenter 会把主题 token 写成 body 内联变量(压过普通样式表),

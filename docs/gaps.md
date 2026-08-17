@@ -40,7 +40,11 @@
   渐变。坑:background 简写会重置 background-clip:text(文字变透明、只剩色块)——必须只写 background-image。
 - **locale=zh 全字段覆盖实测通过**(headless 断言:placeholder/统计轮步/工具调用/首 token/缓存命中/
   输入输出 tok/后台任务/对话/轨迹 全中文;与会话内容的中英混合无关)。语言映射"没生效"多为
-  旧构建/未重载;设置桥写回成功后重载 webview 即全量生效。
+  旧构建/未重载;设置桥写回成功后重载 webview 即全量生效;再加固:webview 每次 ready 都按
+  VS Code 设置强制对齐实例 locale(不一致写回+重载),不依赖"改设置那一刻"的触发时机。
+- **属性选择器 [class$="suffix"] 匹配整个 class 属性值**:SidebarRoot 根是 root+quietBars 双类,
+  [class$="_root"] 漏匹配(整值以 quietBars 结尾),宽度覆盖静默失效 → 用户侧"撑满没修复";
+  改用 [class*="_root "](词尾含空格)后 SidebarRoot 根 width:100% 生效(实测 280→1099px)。
   Phase 6 裁剪排除 directory-picker-* 后消失。
 
 

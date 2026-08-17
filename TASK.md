@@ -10,7 +10,10 @@
 > 撑满全宽 —— 覆盖 SidebarRoot 内联 width)、logo(wordmark)保留、返回按钮 = 空心会话气泡
 > **放回 session title 行内**(rAF 重插 + document 委托防 React 清除)、Deep diving 状态行
 > 改强调色渐变(background-image 覆盖,保留 background-clip:text 文字可见)、语言映射
-> 生效(写回后重载 webview;实测 locale=zh 覆盖 placeholder/统计/标签/后台任务全字段)。
+> 生效(写回后重载 webview;实测 locale=zh 覆盖 placeholder/统计/标签/后台任务全字段;
+> 每次 webview ready 按 VS Code 设置强制对齐实例 locale,改设置必生效)。
+> Workspaces 撑满根因修正:SidebarRoot 根是 root+quietBars 双类,属性选择器按整个 class 值
+> 匹配会漏 —— 改用词尾含空格匹配,设 width:100% 真正撑满。
 > 待用户:扩展宿主窗口视觉确认(双击 启动扩展.command)。
 
 > 本版重写原因(2026-08-17 用户决策):
