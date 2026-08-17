@@ -133,6 +133,26 @@ html, body, #root { background: transparent !important; }
 
 const shortId = (id) => id.replace('@deepseek-ai/', '');
 
+/**
+ * 会话切换桥(静态,与 shell rev 绑定):原生 Sessions 树 → webview 的切换契约。
+ * 扩展侧 post 'dsh:switch-session' → 本桥写上游 attachPersistence 读取的
+ * localStorage(dsh.sessions.current,JSON {sessionId})→ 回 post
+ * 'switch-session:applied' → chat-panel 重注入 html 完成重载(上游在 boot 时恢复会话)。
+ * 无 acquireVsCodeApi 的环境(纯浏览器调试/冒烟)下静默,不影响 UI。
+ */
+const BRIDGE_JS = `window.addEventListener('message', (event) => {
+  const msg = event.data;
+  if (msg === null || typeof msg !== 'object' || msg.type !== 'dsh:switch-session') return;
+  if (typeof msg.sessionId !== 'string') return;
+  try {
+    localStorage.setItem('dsh.sessions.current', JSON.stringify({ sessionId: msg.sessionId }));
+    window.parent.postMessage({ type: 'switch-session:applied', sessionId: msg.sessionId }, '*');
+  } catch (err) {
+    console.error('[dsh-bridge] switch-session:', String(err));
+  }
+});
+`;
+
 /** 读取现存 rc.6 抓取图(如存在)用于集合核对。 */
 function referenceGraph() {
   const refBoot = join(dest, '..', 'dsh-plugins', 'boot.js');
@@ -225,7 +245,8 @@ async function main() {
   const graph = { rev: graphRev, entries: graphEntries };
   const bootJs = `window.__DSH_BOOT__ = ${JSON.stringify(graph).replaceAll('<', '\\u003c')};\n`;
   writeFileSync(join(dest, 'boot.js'), bootJs);
-  html = html.replace(/<head>/i, '<head><link rel="stylesheet" href="./shell.css" /><script src="./boot.js"></script>');
+  writeFileSync(join(dest, 'bridge.js'), BRIDGE_JS);
+  html = html.replace(/<head>/i, '<head><link rel="stylesheet" href="./shell.css" /><script src="./boot.js"></script><script src="./bridge.js"></script>');
   writeFileSync(shellHtml, html);
 
   // 5. 与参考图集合核对(ref-graph-rc6.json 优先;旧抓取图兜底)

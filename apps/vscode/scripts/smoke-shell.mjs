@@ -104,6 +104,17 @@ console.log('STATE:', JSON.stringify(state, null, 1));
 console.log('RELAY LOG:', relayLog.slice(0, 20).join('\n'));
 console.log('CONSOLE(前 20):');
 for (const m of consoleMsgs.slice(0, 20)) console.log(' ', m);
+// bridge 契约:派发切换消息 → localStorage 写入上游恢复键
+const bridgeOk = await page.evaluate(() => {
+  return new Promise((resolve) => {
+    const done = () => resolve(true);
+    window.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'switch-session:applied') done();
+    }, { once: true });
+    window.postMessage({ type: 'dsh:switch-session', sessionId: 'smoke-bridge-test' }, '*');
+    setTimeout(() => resolve(localStorage.getItem('dsh.sessions.current') !== null), 1500);
+  });
+});
 await browser.close();
 
 // ---- 断言(裁剪模式下应全绿)----
@@ -122,6 +133,7 @@ if (!transparentOk(state.bodyBg)) failures.push(`body 背景非透明:${state.bo
 if (typeof state.frameBg === 'string' && !transparentOk(state.frameBg)) failures.push(`frame 背景非透明:${state.frameBg}`);
 const hasRpc = relayLog.some((l) => l.includes('/api/'));
 if (!hasRpc) failures.push('无任何 RPC 经代理到达 3080');
+if (!bridgeOk) failures.push('会话切换桥未生效(localStorage 未写入)');
 const wsOk = relayLog.some((l) => l.includes('WS connected'));
 if (!wsOk) failures.push('WS 事件流未建立');
 
