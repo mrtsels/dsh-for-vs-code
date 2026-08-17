@@ -341,6 +341,16 @@ const BRIDGE_JS = `(() => {
   'use strict';
   const BOOT_SESSION_KEY = 'dsh.sessions.current';
   const VIEW_KEY = 'dsh.ui.view';
+  // 消息回传宿主:VS Code webview 用 acquireVsCodeApi(官方通道);无该 API 的
+  // headless/调试环境回退 window.parent.postMessage
+  let vscodeApi = null;
+  try { vscodeApi = window.acquireVsCodeApi(); } catch (err) { vscodeApi = null; }
+  const postToHost = (message) => {
+    if (vscodeApi !== null && vscodeApi !== undefined) {
+      try { vscodeApi.postMessage(message); return; } catch (err) {}
+    }
+    try { window.parent.postMessage(message, '*'); } catch (err) {}
+  };
   // 会话气泡 icon(用户要求:不用箭头;空心底,不实心)
   const SESSIONS_ICON = '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M2 2.75A1.75 1.75 0 0 1 3.75 1h8.5A1.75 1.75 0 0 1 14 2.75v5.5A1.75 1.75 0 0 1 12.25 10H8.1l-3.5 3.1a.6.6 0 0 1-1-.46V10H3.75A1.75 1.75 0 0 1 2 8.25v-5.5Z"/></svg>';
 
@@ -465,7 +475,7 @@ const BRIDGE_JS = `(() => {
       event.stopPropagation();
       event.preventDefault();
       try { localStorage.setItem(VIEW_KEY, 'chat'); } catch (err) {}
-      window.parent.postMessage({ type: 'dsh:new-session' }, '*');
+      postToHost({ type: 'dsh:new-session' });
       return;
     }
     if (target.closest('.dsh-back-button') !== null) {
@@ -494,7 +504,7 @@ const BRIDGE_JS = `(() => {
       event.stopPropagation();
       event.preventDefault();
       try { localStorage.setItem(VIEW_KEY, 'chat'); } catch (err) {}
-      window.parent.postMessage({ type: 'dsh:open-workspace', title, newSession: clickedButton !== null }, '*');
+      postToHost({ type: 'dsh:open-workspace', title, newSession: clickedButton !== null });
       return;
     }
   }, true);
@@ -580,7 +590,7 @@ const BRIDGE_JS = `(() => {
     if (typeof msg.sessionId !== 'string') return;
     try {
       localStorage.setItem(BOOT_SESSION_KEY, JSON.stringify({ sessionId: msg.sessionId }));
-      window.parent.postMessage({ type: 'switch-session:applied', sessionId: msg.sessionId }, '*');
+      postToHost({ type: 'switch-session:applied', sessionId: msg.sessionId });
     } catch (err) {
       console.error('[dsh-bridge] switch-session:', String(err));
     }

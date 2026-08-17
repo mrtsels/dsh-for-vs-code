@@ -4,6 +4,7 @@
  * Pseudoterminal 终端、改动审查面板(方案 a)。
  */
 import * as vscode from 'vscode';
+import { readFileSync } from 'node:fs';
 import { HarnessRuntime } from './agent/runtime.js';
 import { SessionManager } from './agent/session-manager.js';
 import { AgentController } from './agent/controller.js';
@@ -684,8 +685,11 @@ export function activate(context: vscode.ExtensionContext): void {
           workspaceRoot !== '' && desc.cwd !== workspaceRoot
             ? `\n⚠ 实例 cwd(${desc.cwd}) ≠ 工作区(${workspaceRoot})`
             : '';
+        // 本地装配的 dsh-shell UI rev(版本确认:重开后若 rev 变化即已加载新产物)
+        const shellRev = readUiShellRev(context);
         void vscode.window.showInformationMessage(
-          `✅ 已连接 dsh ${desc.version}\nprovider=${desc.provider}\n模型=${desc.model}\ncwd=${desc.cwd}${cwdNote}`,
+          `✅ 已连接 dsh ${desc.version}\nprovider=${desc.provider}\n模型=${desc.model}\ncwd=${desc.cwd}${cwdNote}`
+            + `\nUI rev=${shellRev}(dist/web/dsh-shell 装配版本)`,
         );
       } catch (error) {
         void vscode.window.showErrorMessage(
@@ -765,4 +769,18 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   // 所有 disposer 已注册到 context.subscriptions,activate 幂等(空场景安全)
+}
+
+/** 读取本地装配的 dsh-shell UI rev(verifyConnection 用;失败返回占位)。 */
+function readUiShellRev(context: vscode.ExtensionContext): string {
+  try {
+    const bootJs = readFileSync(
+      vscode.Uri.joinPath(context.extensionUri, 'dist', 'web', 'dsh-shell', 'boot.js').fsPath,
+      'utf8',
+    );
+    const match = bootJs.match(/"rev":"([^"]+)"/);
+    return match?.[1] ?? '(未知)';
+  } catch {
+    return '(未装配:先跑 pnpm build:shell)';
+  }
 }
