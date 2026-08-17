@@ -191,8 +191,8 @@ const debugBridge = `
       ' first=' + (first ? first.tagName + '.' + String(first.className).slice(0, 40) : 'none'));
   };
   setTimeout(probeDisplay, 3000);
-  // CSP 检测诊断:与 preload 的 querySelector 一致
-  send('error', 'CSP-大写查询=' + (document.querySelector('meta[http-equiv="Content-Security-Policy"]') !== null)
+  // CSP 检测诊断:与 preload 的 querySelector 一致(探针,info 静默不弹横幅)
+  send('info', 'CSP-大写查询=' + (document.querySelector('meta[http-equiv="Content-Security-Policy"]') !== null)
     + ' CSP-小写查询=' + (document.querySelector('meta[http-equiv="content-security-policy"]') !== null)
     + ' modulepreload=' + (document.querySelector('link[rel="modulepreload"]') !== null)
     + ' module-script=' + (document.querySelector('script[type="module"]') !== null));
