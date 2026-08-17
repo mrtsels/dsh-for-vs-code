@@ -142,10 +142,8 @@ const debugBridge = `
   const send = (kind, msg) => {
     const text = '[dsh:' + kind + '] ' + String(msg).slice(0, 800);
     if (typeof console !== 'undefined') console.error(text);
-    if (kind === 'info') {
-      failEl.style.background = '#b7791f';
-    }
-    showFail(text);
+    // 仅 error/rejection 显示横幅;info 探针走 console + 调试通道,不遮挡 UI
+    if (kind !== 'info') showFail(text);
     if (vs) vs.postMessage({ type: 'debug', kind, message: String(msg).slice(0, 500) });
   };
   window.addEventListener('error', (e) => send('error', e.message || (e.target && e.target.src) || e.error), true);
