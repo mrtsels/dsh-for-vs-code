@@ -252,16 +252,17 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
       text/uri-list 解析 + webUtils feature-detect 降级)→ bridge dsh:attachments:add(白名单 1..16,
       uri ≤8k)→ context-attachments.addUris(Uri.parse/stat/目录拒绝/去重/上限)→ 发送时
       workspace.fs 读取(1MiB 上限/二进制检测/20k 截断/总量 100k)→ formatSendContext 组装;
-      2026-08-21 迭代:附着条改注入输入卡片内 textarea 上方(Message your agent 位置),文件 chip 带 × 移除
+      2026-08-21 迭代:附着条改注入 composer 座位容器([data-composer-seat])最前 =
+      输入框正上方,不触碰输入卡片内部(上游 card flex 布局不可插入);文件 chip 带 × 移除
 - [x] P10-3 **附着活动文件**:设置 deepseekHarness.context.attachActiveFile + toggleAttachActiveFile
       命令;onDidChangeActiveTextEditor/onDidChangeConfiguration 推送状态;发送瞬间 document.getText()
-      快照(含未保存改动/untitled)。2026-08-21 迭代(用户反馈):UI 改为**存在才显示**的指示
-      (icon + 文件名,dirty 带 ●,悬停显完整路径;无活动文件/关闭时完全不显示,无灰色禁用态),
-      点击指示关闭附着
+      快照(含未保存改动/untitled)。2026-08-21 迭代(用户反馈):UI 改为**存在即显示**的指示
+      (icon + 文件名,dirty 带 ●,悬停显完整路径;无活动文件时完全不显示,无禁用灰态;
+      开关只决定是否随消息附着,不影响显示),点击指示切换随消息附着(on=强调色)
 - [x] P10-4 **附着活动选区**:设置 attachSelection + 命令;onDidChangeTextEditorSelection 50ms
       防抖;多光标全选区;空选区禁用;选区覆盖整文件与 full-file 去重。2026-08-21 迭代(用户反馈):
-      UI 改为**存在才显示**的指示(icon + "N lines selected",单行 "1 line selected";无选区/关闭时
-      完全不显示),点击指示关闭附着
+      UI 改为**存在即显示**的指示(icon + "N lines selected",单行 "1 line selected";无选区时
+      完全不显示;开关只决定是否随消息附着),点击指示切换随消息附着(on=强调色)
 - [x] P10-5 G0 四门绿(typecheck/lint 0/test 91 含 33 个附着单测/build)+ smoke-shell 扩展断言已加入
       (状态注入→chip 渲染、模拟 text/uri-list drop→回传 add,实测 Phase 10 断言全过)+ 手动清单
       docs/manual-tests/phase-10.md。冒烟整体通过**待重跑**:脚本此前加载到 blank 会话导致既有

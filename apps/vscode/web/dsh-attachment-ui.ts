@@ -171,15 +171,15 @@ const SELECTION_ICON_SVG =
   + '<path d="M2.5 4h11M2.5 8h11M2.5 12h6"/>'
   + '<path d="M12.5 9.5v4.5l1.8-1.4 1.7 1.4v-4.5"/></svg>';
 
-/** 输入卡片内、textarea 上方注入附着条(与上游图片附件 rail 同层,即
- *  "Message your agent" 输入框的位置);composer 未就绪返回 null;根已在 DOM 则复用。 */
+/** 注入到 composer 座位容器([data-composer-seat])最前 = "Message your agent"
+ *  输入框正上方;作为座位容器的兄弟节点,**不触碰输入卡片内部**(上游 card 是
+ *  React 严格管理的 flex 布局,插入子节点会破坏 textarea 排版 —— 2026-08-21 实测教训)。
+ *  composer 座位未就绪返回 null;根已在 DOM 则复用。 */
 function ensureRoot(): HTMLElement | null {
   if (document.body.classList.contains('dsh-sessions')) return null;
   if (root !== null && root.isConnected) return root;
-  const card = document.querySelector('[data-composer-card]');
-  if (card === null) return null;
-  const scroll = card.querySelector('[data-input-scroll]');
-  const anchor = scroll ?? card.firstElementChild;
+  const seat = document.querySelector('[data-composer-seat]');
+  if (seat === null) return null;
   root = document.createElement('div');
   root.id = 'dsh-attachment-root';
   root.className = 'dsh-attachment-root';
@@ -191,7 +191,7 @@ function ensureRoot(): HTMLElement | null {
   toolbar.className = 'dsh-attach-toolbar';
   toolbar.setAttribute('data-dsh-attach-toolbar', '');
   toolbar.hidden = true;
-  // 活动文件指示:开启 + 有活动编辑器才显示(icon + 文件名);点击切换附着
+  // 活动文件指示:存在即显示(icon + 文件名);点击切换是否随消息附着
   const activeIndicator = document.createElement('button');
   activeIndicator.type = 'button';
   activeIndicator.className = 'dsh-attach-indicator';
@@ -207,7 +207,7 @@ function ensureRoot(): HTMLElement | null {
     if (lastState === null) return;
     postToHost({ type: 'dsh:attachments:toggle', kind: 'activeFile', enabled: !lastState.activeFileEnabled });
   });
-  // 选区指示:开启 + 有非空选区才显示(icon + N lines selected);点击切换附着
+  // 选区指示:存在即显示(icon + N lines selected);点击切换是否随消息附着
   const selectionIndicator = document.createElement('button');
   selectionIndicator.type = 'button';
   selectionIndicator.className = 'dsh-attach-indicator';
@@ -231,15 +231,8 @@ function ensureRoot(): HTMLElement | null {
   toast.hidden = true;
   toolbar.append(activeIndicator, selectionIndicator, files);
   root.append(overlay, toolbar, toast);
-  card.insertBefore(root, anchor);
+  seat.insertBefore(root, seat.firstChild);
   return root;
-}
-
-/** 选区总行数(多光标求和;1-based 行号差 +1,单行计 1) */
-function selectionLineCount(selections: readonly SelectionSummaryState[]): number {
-  let total = 0;
-  for (const s of selections) total += Math.max(s.endLine - s.startLine + 1, 1);
-  return total;
 }
 
 function renderState(state: AttachmentState): void {
@@ -251,10 +244,11 @@ function renderState(state: AttachmentState): void {
   const selectionIndicator = el.querySelector('.dsh-attach-indicator[data-kind="selection"]');
   const files = el.querySelector('.dsh-attach-files');
   let hasContent = false;
-  // 活动文件指示:存在 + 开启才显示;不存在/关闭则完全不显示(无灰色禁用态)
+  // 活动文件指示:**存在即显示**(开关只决定是否随消息附着,不影响显示;on=强调色)
   if (activeIndicator instanceof HTMLButtonElement) {
-    const show = state.activeFileEnabled && state.activeFileAvailable && state.activeFile !== undefined;
+    const show = state.activeFileAvailable && state.activeFile !== undefined;
     activeIndicator.hidden = !show;
+    activeIndicator.classList.toggle('on', state.activeFileEnabled);
     if (show && state.activeFile !== undefined) {
       const nameEl = activeIndicator.querySelector('.dsh-attach-indicator-name');
       const dirty = state.activeFile.isDirty ? ' •' : '';
@@ -262,21 +256,22 @@ function renderState(state: AttachmentState): void {
       activeIndicator.title =
         state.activeFile.path
         + (state.activeFile.isDirty ? ' · ' + str('未保存', 'unsaved') : '')
-        + ' · ' + str('点击关闭附着', 'click to detach');
+        + ' · ' + str('点击切换随消息附着', 'click to toggle attach');
       hasContent = true;
     }
   }
-  // 选区指示:存在 + 开启才显示
+  // 选区指示:**存在即显示**
   if (selectionIndicator instanceof HTMLButtonElement) {
-    const show = state.selectionEnabled && state.selectionAvailable && state.selections.length > 0;
+    const show = state.selectionAvailable && state.selections.length > 0;
     selectionIndicator.hidden = !show;
+    selectionIndicator.classList.toggle('on', state.selectionEnabled);
     if (show) {
       const linesEl = selectionIndicator.querySelector('.dsh-attach-indicator-lines');
       const lines = selectionLineCount(state.selections);
       if (linesEl !== null) {
         linesEl.textContent = lines === 1 ? '1 line selected' : lines + ' lines selected';
       }
-      selectionIndicator.title = formatRanges(state.selections) + ' · ' + str('点击关闭附着', 'click to detach');
+      selectionIndicator.title = formatRanges(state.selections) + ' · ' + str('点击切换随消息附着', 'click to toggle attach');
       hasContent = true;
     }
   }
@@ -304,6 +299,13 @@ function renderState(state: AttachmentState): void {
     }
   }
   if (toolbar instanceof HTMLElement) toolbar.hidden = !hasContent;
+}
+
+/** 选区总行数(多光标求和;1-based 行号差 +1,单行计 1) */
+function selectionLineCount(selections: readonly SelectionSummaryState[]): number {
+  let total = 0;
+  for (const s of selections) total += Math.max(s.endLine - s.startLine + 1, 1);
+  return total;
 }
 
 /* ---- 错误 toast ---- */

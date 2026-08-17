@@ -124,9 +124,10 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
   API 合约,拿不到就降级提示);webview 只传 URI,内容一律扩展侧 `workspace.fs` 发送时读取
   (1 MiB 上限/二进制 NUL 检测/20k 截断/总量 100k/目录拒绝)。上游输入框冻结 → 附着 UI 走
   bridge 注入(dsh-attachment-ui.js,装配时拷入 dsh-shell 并注入 </body> 前),附着条注入输入
-  卡片内 textarea 上方(Message your agent 位置,与上游图片附件 rail 同层);指示为"存在才显示"
-  (icon+文件名 / icon+N lines selected,无内容完全不显示,无禁用灰态);chip 文案 textContent
-  渲染(文件名转义)
+  composer 座位容器([data-composer-seat])最前 = 输入框正上方,**不触碰输入卡片内部**
+  (上游 card 是 React 管理的 flex 布局,插入子节点会破坏 textarea 排版);指示**存在即显示**
+  (icon+文件名 / icon+N lines selected,无内容完全不显示,无禁用灰态;开关只决定是否随消息附着);
+  chip 文案 textContent 渲染(文件名转义)
 
 ## 执行
 

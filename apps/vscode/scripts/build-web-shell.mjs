@@ -476,8 +476,8 @@ body, body[data-ds-dark-theme] {
   -webkit-background-clip: text !important;
 }
 
-/* ---- Phase 10 附着 UI(注入输入卡片内 textarea 上方 = "Message your agent" 位置;
-       dsh-attachment-ui.js 渲染,shell.css 提供样式) ---- */
+/* ---- Phase 10 附着 UI(注入 composer 座位容器最前 = "Message your agent" 输入框正上方;
+       不触碰输入卡片内部,dsh-attachment-ui.js 渲染,shell.css 提供样式) ---- */
 #dsh-attachment-root { position: relative; z-index: 30; }
 body.dsh-sessions #dsh-attachment-root { display: none !important; }
 .dsh-drop-overlay {
@@ -488,10 +488,10 @@ body.dsh-sessions #dsh-attachment-root { display: none !important; }
 body.dsh-dragging .dsh-drop-overlay { display: block; }
 .dsh-attach-toolbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-  padding: 4px 10px 0;
+  padding: 4px 10px 6px;
 }
 .dsh-attach-toolbar[hidden] { display: none; }
-/* 活动文件 / 选区指示:存在 + 开启才渲染(无灰色禁用态);点击切换附着 */
+/* 活动文件 / 选区指示:存在即显示(无禁用灰态);on = 随消息附着(强调色),off = 仅展示 */
 .dsh-attach-indicator {
   display: inline-flex; align-items: center; gap: 5px;
   max-width: 280px; box-sizing: border-box;
@@ -503,6 +503,10 @@ body.dsh-dragging .dsh-drop-overlay { display: block; }
 }
 .dsh-attach-indicator:hover {
   background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 20%, var(--dsh-host-bg));
+}
+.dsh-attach-indicator.on {
+  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 18%, var(--dsh-host-bg));
+  box-shadow: 0 0 0 1px var(--dsh-host-link, var(--dsh-host-accent)) inset;
 }
 .dsh-attach-indicator[hidden] { display: none; }
 .dsh-attach-indicator-icon { flex: none; display: inline-flex; }

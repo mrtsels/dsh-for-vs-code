@@ -243,7 +243,7 @@ if (backBtn !== null) {
 }
 console.log('[smoke] 返回对话模式,Phase 10 附着断言…');
 // ---- Phase 10 附着 UI 断言(对话模式)----
-// 1) 注入宿主状态(模拟扩展推送 dsh:attachments:state)→ 输入卡片内渲染指示条
+// 1) 注入宿主状态(enabled=true)→ composer 座位容器内渲染指示条
 //    (active file → icon+文件名;selection → icon+N lines selected;拖入文件 → chip)
 await page.evaluate(() => {
   window.postMessage({
@@ -268,22 +268,48 @@ const attachUi = await page.evaluate(() => {
   const sel = document.querySelector('.dsh-attach-indicator[data-kind="selection"]');
   return {
     rootPresent: root !== null,
-    composerCard: document.querySelector('[data-composer-card]') !== null,
-    insideCard: root !== null && root.parentElement !== null && root.parentElement.hasAttribute('data-composer-card'),
+    composerSeat: document.querySelector('[data-composer-seat]') !== null,
+    inSeat: root !== null && root.parentElement !== null && root.parentElement.hasAttribute('data-composer-seat'),
     activeFileVisible: af !== null && !af.hidden,
     activeFileText: af === null ? '' : af.textContent ?? '',
+    activeFileOn: af === null ? false : af.classList.contains('on'),
     selectionVisible: sel !== null && !sel.hidden,
     selectionText: sel === null ? '' : sel.textContent ?? '',
     fileChips: document.querySelectorAll('.dsh-attach-file').length,
   };
 });
-// 2) 不存在则不显示:推送无活动文件/无选区/无附件的状态 → 指示条整体隐藏
+// 2) 存在即显示:enabled=false 但 available=true → 指示仍显示(开关只影响是否随消息附着)
 await page.evaluate(() => {
   window.postMessage({
     type: 'dsh:attachments:state',
     state: {
-      activeFileEnabled: true,
-      selectionEnabled: true,
+      activeFileEnabled: false,
+      selectionEnabled: false,
+      activeFileAvailable: true,
+      selectionAvailable: true,
+      activeFile: { path: 'src/a.ts', languageId: 'typescript', isDirty: false, isUntitled: false },
+      selections: [{ startLine: 3, startCol: 1, endLine: 5, endCol: 10, charCount: 40 }],
+      attachments: [],
+    },
+  }, '*');
+});
+await page.waitForTimeout(400);
+const attachOff = await page.evaluate(() => {
+  const af = document.querySelector('.dsh-attach-indicator[data-kind="activeFile"]');
+  const sel = document.querySelector('.dsh-attach-indicator[data-kind="selection"]');
+  return {
+    activeFileVisible: af !== null && !af.hidden,
+    activeFileOn: af === null ? false : af.classList.contains('on'),
+    selectionVisible: sel !== null && !sel.hidden,
+  };
+});
+// 3) 不存在则不显示:推送无活动文件/无选区/无附件的状态 → 指示条整体隐藏
+await page.evaluate(() => {
+  window.postMessage({
+    type: 'dsh:attachments:state',
+    state: {
+      activeFileEnabled: false,
+      selectionEnabled: false,
       activeFileAvailable: false,
       selectionAvailable: false,
       selections: [],
@@ -362,17 +388,21 @@ if (sessionsLayout.rows > 0) {
 if (!narrowOverflow.noHScroll) failures.push('320px 出现横向滚动(违规)');
 // 返回对话模式(React header 返回 → __dshBridge.setView)
 if (!backExit) failures.push('会话页 header 返回按钮未能切回对话模式');
-// Phase 10 附着 UI 断言:状态注入 → 输入卡片内指示条(icon+文件名 / icon+N lines selected)
-//   + 文件 chip;不存在则不显示;模拟 Explorer 拖放 → 回传 add(仅断言代码,运行由用户安排)
-if (!attachUi.composerCard) failures.push('对话模式缺少上游 composer(data-composer-card)');
+// Phase 10 附着 UI 断言:状态注入 → composer 座位容器内指示条(icon+文件名 / icon+N lines
+//   selected)+ 文件 chip;**存在即显示**(enabled 只影响是否随消息附着);不存在则不显示;
+//   模拟 Explorer 拖放 → 回传 add(仅断言代码,运行由用户安排)
+if (!attachUi.composerSeat) failures.push('对话模式缺少 composer 座位容器(data-composer-seat)');
 if (!attachUi.rootPresent) failures.push('附着 UI 根节点未注入(#dsh-attachment-root)');
-if (!attachUi.insideCard) failures.push('附着条未注入输入卡片内(应在 Message your agent 输入框上方)');
-if (!attachUi.activeFileVisible) failures.push('activeFile 指示未显示(有活动文件+开启时应显示 icon+文件名)');
+if (!attachUi.inSeat) failures.push('附着条未注入 composer 座位容器(应在 Message your agent 输入框正上方)');
+if (!attachUi.activeFileVisible) failures.push('activeFile 指示未显示(存在活动文件时应显示 icon+文件名)');
 if (!attachUi.activeFileText.includes('a.ts')) failures.push(`activeFile 指示缺文件名:${attachUi.activeFileText}`);
 if (attachUi.activeFileText.includes('src/a.ts')) failures.push('activeFile 指示应显示文件名而非路径');
-if (!attachUi.selectionVisible) failures.push('selection 指示未显示(有选区+开启时应显示 icon+N lines selected)');
+if (!attachUi.activeFileOn) failures.push('activeFile 指示缺 on 样式(enabled=true 应强调色)');
+if (!attachUi.selectionVisible) failures.push('selection 指示未显示(存在选区时应显示 icon+N lines selected)');
 if (!/3 lines selected/.test(attachUi.selectionText)) failures.push(`selection 指示缺行数:${attachUi.selectionText}`);
 if (attachUi.fileChips < 1) failures.push('附着文件 chip 未渲染');
+if (!attachOff.activeFileVisible || !attachOff.selectionVisible) failures.push('存在即显示:enabled=false 时指示仍应显示');
+if (attachOff.activeFileOn) failures.push('存在即显示:enabled=false 时指示不应带 on 样式');
 if (attachEmpty !== true) failures.push(`无活动文件/选区时指示条应隐藏:${attachEmpty}`);
 if (dropMsg === null || dropMsg.error !== undefined || dropMsg.attachments?.length !== 2) {
   failures.push(`拖放未回传 dsh:attachments:add:${JSON.stringify(dropMsg)}`);
