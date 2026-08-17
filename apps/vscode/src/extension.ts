@@ -9,9 +9,9 @@ import { SessionManager } from './agent/session-manager.js';
 import { AgentController } from './agent/controller.js';
 import { ChangesPanel, toChangeItems } from './webview/changes-panel.js';
 import { ChatPanel } from './webview/chat-panel.js';
-import { registerSettingsSync, registerPermissionSync } from './settings-sync.js';
-import { SessionsTreeProvider } from './sessions/tree.js';
-import { postRpc, ensureWorkspace } from './rpc.js';
+import { readAgentPresetRoster, registerSettingsBridge } from './settings-bridge.js';
+import { ensureFolderSession } from './sessions/bootstrap.js';
+import { postRpc } from './rpc.js';
 import { SnapshotWatcher } from './vscode/workspace.js';
 import { WorkspaceChangeDecorationProvider } from './vscode/workspace-decoration.js';
 import { HttpProxy } from './vscode/proxy.js';
@@ -80,10 +80,17 @@ export function activate(context: vscode.ExtensionContext): void {
     getBaseUrl: () =>
       vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
     getProxyBase: () => proxy.baseUrl,
+    // 首开会话(Phase 9):globalState 持久化的 cwd 会话;webview 装配时注入 __DSH_BOOT_SESSION__
+    getBootSession: () => {
+      const id = context.globalState.get<string>('dsh.initialSessionId');
+      return id === undefined ? undefined : { sessionId: id };
+    },
   });
-  // 设置同步:VS Code locale/theme(默认 follow-web)↔ dsh 实例设置
-  for (const d of registerSettingsSync(() =>
-    vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+  // 设置桥(Phase 9):theme/locale/permission/agentPreset/busyEnter 双向同步
+  for (const d of registerSettingsBridge(
+    () => vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+    () => controller.currentState === 'running',
+    () => chatPanelHost.isVisible(),
   )) {
     context.subscriptions.push(d);
   }
@@ -209,6 +216,13 @@ export function activate(context: vscode.ExtensionContext): void {
         postState();
         void refreshSessionList();
         void postDiagnostics();
+        // Phase 9:webview 装配早于首开 bootstrap 完成时补发(桥写 localStorage + 重载)
+        {
+          const bootId = context.globalState.get<string>('dsh.initialSessionId');
+          if (bootId !== undefined && !chatPanelHost.hasBootSessionInjected) {
+            chatPanel.post({ type: 'dsh:bootstrap-session', sessionId: bootId });
+          }
+        }
         break;
       case 'ask':
         await askWithContext(request.text);
@@ -420,13 +434,6 @@ export function activate(context: vscode.ExtensionContext): void {
     extensionUri: context.extensionUri,
     activeSessionId: state,
   };
-  // P1-2:权限模式三档同步(running 保护基于 controller 业务状态 + danger modal 确认)
-  context.subscriptions.push(
-    registerPermissionSync(
-      () => vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
-      () => controller.currentState === 'running',
-    ),
-  );
   disposables.add(registerAsk(app));
   disposables.add(registerAgent(app));
   disposables.add(registerReview(app));
@@ -445,13 +452,6 @@ export function activate(context: vscode.ExtensionContext): void {
   // 活动栏 view = WebviewViewProvider:点击图标直接在侧边栏渲染 dsh 原生 UI
   disposables.add(vscode.window.registerWebviewViewProvider(ChatPanel.viewType, chatPanelHost));
 
-  // 会话列表:原生 tree(会话切换在 VS Code 原生层,webview 只渲染会话区)
-  const sessionsTree = new SessionsTreeProvider(() =>
-    vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
-  );
-  // 仅注册 provider(不需要 TreeView API 的额外操作;文档:需要 TreeView API 才用 createTreeView)
-  disposables.add(vscode.window.registerTreeDataProvider('deepseekHarness.sessions', sessionsTree));
-  disposables.add(sessionsTree.startAutoRefresh());
   // P0-1:重试连接命令(状态栏点击同入口);状态栏 command 绑定
   const retryConnection = (): void => {
     void runtime.connect().then(() => {
@@ -460,60 +460,31 @@ export function activate(context: vscode.ExtensionContext): void {
   };
   disposables.add(vscode.commands.registerCommand('deepseekHarness.retryConnection', retryConnection));
   statusItem.command = 'deepseekHarness.retryConnection';
-  // P0-3:切换工作区文件夹后重新关联 dsh workspace + 刷新会话树 + 重估 cwd 一致性
+  // P0-3 + Phase 9:切换工作区文件夹 → 确保该文件夹有会话(新建时自动进入),
+  // 并重估 cwd 一致性。有现存会话的文件夹不干预(恢复上次会话语义)。
   disposables.add(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (wsPath) {
-        void ensureWorkspace(
-          vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
-          wsPath,
-        ).catch(() => undefined);
-        void sessionsTree.refresh().catch(() => undefined);
+        void bootstrapFolder(wsPath, { forceMessage: true });
       }
       cwdWarned = false;
       updateStatusItem(runtime.currentState, runtime.lastError);
     }),
   );
-  disposables.add(
-    vscode.commands.registerCommand('deepseekHarness.switchSession', (sessionId: unknown) => {
-      if (typeof sessionId !== 'string') return;
-      // 通知 webview 切换会话(boot 桥写 dsh.sessions.current + 扩展重注入 html)
-      chatPanel.post({ type: 'dsh:switch-session', sessionId });
-      // P1-5:原生切换也持久化活跃会话(与 session:open 路径对齐,重启恢复一致)
-      void rememberActiveSession(context, sessionId);
-      state.value = sessionId;
-      controller.setActiveSession(sessionId);
-    }),
-  );
-  disposables.add(
-    vscode.commands.registerCommand('deepseekHarness.refreshSessions', () => {
-      void sessionsTree.refresh().catch((error) => {
-        void vscode.window.showErrorMessage(
-          `会话列表刷新失败:${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
-    }),
-  );
-  // 新建会话:用 VS Code 当前工作区创建(session.create 支持 workspaceId/cwd),
-  // 实现"工作区自动关联";无工作区时回退实例默认 cwd
+  // 新建会话(Phase 9):复用/新建当前工作区的空白会话,自动进入;
+  // 无工作区时回退实例默认 cwd
   disposables.add(
     vscode.commands.registerCommand('deepseekHarness.newSession', async () => {
       const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
       try {
-        // 优先用 workspaceId(确保 dsh workspace 与 VS Code 工作区关联),失败回退 cwd
-        const workspaceId = wsPath ? await ensureWorkspace(current, wsPath) : undefined;
-        const payload = workspaceId
-          ? { workspaceId }
-          : wsPath
-            ? { cwd: wsPath }
-            : {};
-        const body = await postRpc(current, 'session.create', payload);
-        const sessionId = (body?.result?.value as { sessionId?: string } | undefined)?.sessionId;
-        if (typeof sessionId !== 'string') throw new Error('session.create: 缺少 sessionId');
+        const sessionId = wsPath
+          ? await ensureFolderSession(current, wsPath)
+          : await createSessionAtDefaultCwd(current);
+        if (sessionId === undefined) throw new Error('新建会话:实例未就绪或路径无效');
+        await context.globalState.update('dsh.initialSessionId', sessionId);
         chatPanel.post({ type: 'dsh:switch-session', sessionId });
-        void sessionsTree.refresh().catch(() => undefined);
       } catch (error) {
         void vscode.window.showErrorMessage(
           `新建会话失败:${error instanceof Error ? error.message : String(error)}`,
@@ -521,16 +492,32 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
   );
-  void sessionsTree.refresh().catch(() => undefined);
-  // 工作区自动关联(连接后):确保 dsh 实例有 VS Code 工作区对应的 workspace;
-  // 失败静默(实例未就绪时由后续 newSession 重试)
+  // Phase 9 首开:确保当前工作区有会话(复用空白或新建),存入 globalState;
+  // 实例未就绪时静默(webview ready 时再补发一次)
+  const bootstrapFolder = async (folder: string, opts?: { forceMessage?: boolean }): Promise<void> => {
+    const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
+    try {
+      const sessionId = await ensureFolderSession(current, folder);
+      if (sessionId === undefined) return;
+      await context.globalState.update('dsh.initialSessionId', sessionId);
+      if (opts?.forceMessage === true && !chatPanelHost.hasBootSessionInjected) {
+        chatPanel.post({ type: 'dsh:bootstrap-session', sessionId });
+      }
+    } catch (error) {
+      // 实例未就绪/路径无效:静默,由 ready 或下次文件夹切换重试
+      logger.warn(`首开会话 bootstrap 失败:${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
   const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (wsPath) {
-    void ensureWorkspace(
-      vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
-      wsPath,
-    ).catch(() => undefined);
+    void bootstrapFolder(wsPath);
   }
+  // 无工作区时:session.create 空负载 → 实例默认 cwd
+  const createSessionAtDefaultCwd = async (current: string): Promise<string | undefined> => {
+    const body = await postRpc(current, 'session.create', {});
+    const sessionId = (body?.result?.value as { sessionId?: string } | undefined)?.sessionId;
+    return typeof sessionId === 'string' ? sessionId : undefined;
+  };
 
   // P1-3:模型查看/选择 QuickPick(模型由 dsh 实例 provider 配置决定,扩展只读展示+指引)
   disposables.add(
@@ -570,6 +557,32 @@ export function activate(context: vscode.ExtensionContext): void {
       } catch (error) {
         void vscode.window.showErrorMessage(
           `读取模型列表失败:${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }),
+  );
+
+  // Phase 9:Agent preset 选择(名册驱动 QuickPick → 写 VS Code 设置,设置桥写回实例)
+  disposables.add(
+    vscode.commands.registerCommand('deepseekHarness.selectAgentPreset', async () => {
+      const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
+      try {
+        const roster = await readAgentPresetRoster(current);
+        if (roster === undefined) throw new Error('实例未就绪');
+        const currentVal = vscode.workspace.getConfiguration('deepseekHarness').get<string>('agentPreset', '');
+        const pick = await vscode.window.showQuickPick(
+          ['', ...roster].map((id) => ({
+            label: id === '' ? '跟随实例默认(不写回)' : id,
+            description: id === currentVal ? '当前' : undefined,
+            id,
+          })),
+          { placeHolder: '选择新建会话的默认 agent preset' },
+        );
+        if (pick === undefined) return;
+        await vscode.workspace.getConfiguration('deepseekHarness').update('agentPreset', pick.id, true);
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `读取 agent preset 失败:${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }),
