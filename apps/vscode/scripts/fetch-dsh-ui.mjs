@@ -130,10 +130,27 @@ const localBoot = {
 const debugBridge = `
 ;(() => {
   const vs = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
-  if (!vs) return;
-  const send = (kind, msg) => vs.postMessage({ type: 'debug', kind, message: String(msg).slice(0, 500) });
+  // 错误横幅:渲染失败时页面直接可见(不依赖 console),白屏不再需要猜原因
+  const failEl = document.createElement('div');
+  failEl.id = 'dsh-fail';
+  failEl.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;font:11px/1.5 monospace;padding:6px 8px;white-space:pre-wrap;display:none;max-height:40vh;overflow:auto';
+  document.documentElement.appendChild(failEl);
+  const showFail = (text) => {
+    failEl.style.display = 'block';
+    failEl.textContent += (failEl.textContent ? '\\n' : '') + text;
+  };
+  const send = (kind, msg) => {
+    const text = '[dsh:' + kind + '] ' + String(msg).slice(0, 800);
+    if (typeof console !== 'undefined') console.error(text);
+    showFail(text);
+    if (vs) vs.postMessage({ type: 'debug', kind, message: String(msg).slice(0, 500) });
+  };
   window.addEventListener('error', (e) => send('error', e.message || (e.target && e.target.src) || e.error), true);
   window.addEventListener('unhandledrejection', (e) => send('rejection', e.reason && (e.reason.stack || e.reason.message || e.reason)));
+  // module 入口加载失败监听(boot 先执行,module 标签已在 DOM)
+  document.querySelectorAll('script[type="module"]').forEach((m) => {
+    m.addEventListener('error', () => send('error', '[module-load-fail] ' + m.getAttribute('src')));
+  });
   // CSP 检测诊断:与 preload 的 querySelector 一致
   send('error', 'CSP-大写查询=' + (document.querySelector('meta[http-equiv="Content-Security-Policy"]') !== null)
     + ' CSP-小写查询=' + (document.querySelector('meta[http-equiv="content-security-policy"]') !== null)
