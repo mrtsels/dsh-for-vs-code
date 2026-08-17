@@ -58,8 +58,11 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
   拖拽条一并隐藏);Workspaces 模式 = 独立页面的**全宽单栏**:`#root` 撑宽 `max(1100px,100vw)`
   (> SIDEBAR_AUTO_COLLAPSE=1024 → AppFrame 非窄布局 → 侧边栏渲染宽版浏览器),frame 网格
   `minmax(0,1fr) 0px 0px` 让侧边栏列占满整行,内容自适应窗口宽度;logo 行保留、仅隐藏折叠钮
-- **返回按钮不可插入 React 子树**(实测):上游组件重渲染会清除外部注入节点,点击随即失效;
-  改为 body 直接子元素的固定悬浮按钮(z-index 1000),title 行 `padding-left: 36px` 让位
+- **会话切换按钮插 title 行内**(用户要求,2026-08-18):上游组件重渲染会清除注入节点 →
+  MutationObserver(rAF)重插 + document capture 事件委托(按钮移除瞬间点击仍命中);
+  空会话 hero 无 title 行 → fixed 悬浮兜底;Workspaces 页顶部 fixed 返回
+- **Workspaces 全宽需要双重覆盖**:frame 网格 `minmax(0,1fr) 0px 0px` 之外,SidebarRoot
+  根元素还有上游内联 `width: 280px`(拖拽偏好)→ 必须 `[class$="_sidebarCol"] > [class$="_root"] { width: auto !important }` 才真正撑满
 - **heroGlow 是硬编码 SVG 色**(#6187D8,不读 token):去掉底色后仍透蓝光,shell.css 用
   `[class$="_heroGlow"] ellipse { fill: var(--dsh-host-fg) !important; }` 覆盖(fill 属性可被 CSS 覆盖)
 - **主题 token 三层**:上游 ThemePresenter 会把主题 token 写成 body 内联变量(压过普通样式表),
@@ -71,7 +74,8 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
 - **locale 运行中不热切换**(实测):settings.update 写 locale.preference 后,已打开的 webview 界面
   语言不变(仅 boot 时应用);扩展在写回成功后重载 webview(settings-bridge onLocaleApplied → chat-panel reload)
 - **"Deep diving..." 状态行**:上游硬编码品牌蓝渐变(--dsw-static-deepseek-*)做 shimmer 文字;
-  shell.css 覆盖 background 为 `--dsh-host-accent`(--vscode-textLink-foreground)渐变,动画保留
+  shell.css 覆盖为 `--dsh-host-accent` 渐变,但**必须用 background-image 而非 background 简写**
+  (简写会重置 background-clip:text → 文字透明只剩色块);background-clip/-webkit 前缀显式保留
 
 ## 执行
 

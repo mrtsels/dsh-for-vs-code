@@ -36,8 +36,11 @@
   界面切换,仅 boot 时读取应用;浏览器版 3080 同行为)。扩展侧解法:语言写回实例成功后重载
   webview(与 switch-session 同模式),boot 重新读语言。
 - **"Deep diving..." 状态行是硬编码品牌蓝渐变**(--dsw-static-deepseek-500/200 + background-clip
-  text + shimmer 动画):shell.css 覆盖 background 为 --dsh-host-accent(= --vscode-textLink-foreground)
-  渐变,动画与文字裁切保留。
+  text + shimmer 动画):shell.css 覆盖 background-image 为 --dsh-host-accent(= --vscode-textLink-foreground)
+  渐变。坑:background 简写会重置 background-clip:text(文字变透明、只剩色块)——必须只写 background-image。
+- **locale=zh 全字段覆盖实测通过**(headless 断言:placeholder/统计轮步/工具调用/首 token/缓存命中/
+  输入输出 tok/后台任务/对话/轨迹 全中文;与会话内容的中英混合无关)。语言映射"没生效"多为
+  旧构建/未重载;设置桥写回成功后重载 webview 即全量生效。
   Phase 6 裁剪排除 directory-picker-* 后消失。
 
 

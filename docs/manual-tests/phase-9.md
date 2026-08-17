@@ -21,10 +21,12 @@
 
 ## 2b. 视觉细节(用户反馈迭代)
 
-- [ ] "Deep diving..."(agent 忙碌状态行)为 VS Code 强调色(链接色),非品牌蓝
-- [ ] 左上角返回按钮为"会话"气泡图标
-- [ ] Workspaces 页为占满宽度的单栏列表(非窄条 sidebar),顶部保留 DeepSeek Harness logo
+- [ ] "Deep diving..."(agent 忙碌状态行)为 VS Code 强调色渐变**文字**(清晰可读,非色块)
+- [ ] 会话切换按钮为**空心**会话气泡图标,位于 session title 面包屑行内(左侧,对齐)
+- [ ] Workspaces 页为占满宽度的单栏列表(内容撑满整行,非窄条 sidebar),顶部保留 DeepSeek Harness logo
 - [ ] Workspaces 页点会话标题 → 进入对应会话页(自动返回对话)
+- [ ] locale=zh 后全部 UI 文案为中文:输入占位(给智能体发消息)、对话/轨迹标签、统计行
+      (轮·步/LLM/工具调用/首 token/tok/s/缓存命中/输入输出)、后台任务计数
 
 ## 3. 主题同步
 
