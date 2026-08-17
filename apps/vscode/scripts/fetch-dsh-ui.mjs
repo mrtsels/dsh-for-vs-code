@@ -142,15 +142,30 @@ const debugBridge = `
   const send = (kind, msg) => {
     const text = '[dsh:' + kind + '] ' + String(msg).slice(0, 800);
     if (typeof console !== 'undefined') console.error(text);
+    if (kind === 'info') {
+      failEl.style.background = '#b7791f';
+    }
     showFail(text);
     if (vs) vs.postMessage({ type: 'debug', kind, message: String(msg).slice(0, 500) });
   };
   window.addEventListener('error', (e) => send('error', e.message || (e.target && e.target.src) || e.error), true);
   window.addEventListener('unhandledrejection', (e) => send('rejection', e.reason && (e.reason.stack || e.reason.message || e.reason)));
-  // module 入口加载失败监听(boot 先执行,module 标签已在 DOM)
-  document.querySelectorAll('script[type="module"]').forEach((m) => {
-    m.addEventListener('error', () => send('error', '[module-load-fail] ' + m.getAttribute('src')));
-  });
+  // module 入口加载失败监听(module 标签在 boot 之后解析,须等 DOMContentLoaded)
+  const watchModule = () => {
+    document.querySelectorAll('script[type="module"]').forEach((m) => {
+      m.addEventListener('error', () => send('error', '[module-load-fail] ' + m.getAttribute('src')));
+    });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchModule);
+  else watchModule();
+  // 渲染探针:2s/5s 上报 root 渲染状态(白屏原因可定位:root 空=上游执行问题,root 有内容=显示问题)
+  const probe = (label) => {
+    const root = document.getElementById('root');
+    if (!root) return send('info', label + ' root=缺失');
+    send('info', label + ' root.children=' + root.childElementCount + ' html=' + root.innerHTML.length);
+  };
+  setTimeout(() => probe('T+2s'), 2000);
+  setTimeout(() => probe('T+5s'), 5000);
   // CSP 检测诊断:与 preload 的 querySelector 一致
   send('error', 'CSP-大写查询=' + (document.querySelector('meta[http-equiv="Content-Security-Policy"]') !== null)
     + ' CSP-小写查询=' + (document.querySelector('meta[http-equiv="content-security-policy"]') !== null)
