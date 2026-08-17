@@ -106,3 +106,51 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
   private attach(webview: vscode.Webview): void {
     webview.html = this.buildHtml(webview);
     webview.onDidReceiveMessage((request: WebviewRequest) => {
+      // 调试通道:webview 内 error/unhandledrejection 转发
+      if (request.type === 'debug') {
+        this.log.info(`[dsh-webview:${request.kind}] ${request.message}`);
+        return;
+      }
+      // 会话切换已应用:boot 桥已写 localStorage dsh.sessions.current;
+      // 重新注入 html 完成重载(webview 内 location.reload 会丢掉注入的 html)
+      if (request.type === 'switch-session:applied') {
+        webview.html = this.buildHtml(webview);
+        return;
+      }
+      void Promise.resolve(this.onRequest(request)).catch((error) => {
+        this.post({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+      });
+    });
+  }
+
+  /**
+   * 装配 webview HTML:读 dsh-shell 构建产物(index.html + boot.js),
+   * 注入 CSP(base + nonce)、base href(产物根)与运行时变量(__DSH_WEB_URL__)。
+   * script-src 放行 webview 自身源(cspSource,本地产物)+ nonce 内联脚本;
+   * unsafe-eval 为上游 vite 产物所需(浏览器版 3080 无 CSP;产物本地受信,
+   * connect 仅 127.0.0.1:3080/代理,风险受控)。
+   */
+  private buildHtml(webview: vscode.Webview): string {
+    const shellDir = vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-shell');
+    const nonce = crypto.randomUUID().replace(/-/g, '');
+    const csp = webview.cspSource;
+    const proxyBase = this.getProxyBase();
+    const proxyWs = proxyBase.replace(/^http/, 'ws');
+    // base href 必须指向产物根目录(joinPath 带 '.' 会生成畸形 base → 相对 URL 全 404)
+    const baseHref = webview.asWebviewUri(shellDir) + '/';
+    const bootJs = readFileSync(
+      vscode.Uri.joinPath(shellDir, 'boot.js').fsPath,
+      'utf8',
+    ).replace(/<\/script>/gi, '<\\/script>');
+    const shellHtml = readFileSync(vscode.Uri.joinPath(shellDir, 'index.html').fsPath, 'utf8');
+    const cspMeta =
+      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${csp} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval' ${csp}; img-src ${csp} data: blob:; font-src ${csp} data:; connect-src http://127.0.0.1:3080 ws://127.0.0.1:3080 ${proxyBase} ${proxyWs}; worker-src ${csp} blob:;" />`;
+    // 注入点:head 内插 CSP/base;body 开标签后插 __DSH_WEB_URL__ + boot(先于模块脚本)
+    return shellHtml
+      .replace(/<head>/i, `<head>${baseHref ? `<base href="${baseHref}" />` : ''}${cspMeta}`)
+      .replace(/<body[^>]*>/i, (m) =>
+        `${m}<script nonce="${nonce}">window.__DSH_WEB_URL__ = '${proxyBase}';</script>`
+        + `<script nonce="${nonce}">${bootJs}</script>`,
+      );
+  }
+}
