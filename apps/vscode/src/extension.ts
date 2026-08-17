@@ -9,10 +9,11 @@ import { SessionManager } from './agent/session-manager.js';
 import { AgentController } from './agent/controller.js';
 import { ChangesPanel, toChangeItems } from './webview/changes-panel.js';
 import { ChatPanel } from './webview/chat-panel.js';
-import { registerSettingsSync } from './settings-sync.js';
+import { registerSettingsSync, registerPermissionSync } from './settings-sync.js';
 import { SessionsTreeProvider } from './sessions/tree.js';
 import { postRpc, ensureWorkspace } from './rpc.js';
 import { SnapshotWatcher } from './vscode/workspace.js';
+import { WorkspaceChangeDecorationProvider } from './vscode/workspace-decoration.js';
 import { runCommandInTerminal } from './vscode/terminal.js';
 import { collectEditorContext } from './vscode/editor.js';
 import { collectDiagnostics, countWorkspaceDiagnostics } from './vscode/diagnostics.js';
@@ -49,12 +50,19 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // ---- 面板与 watcher(先建,回调闭包后续接线) ----
   const changesPanel = new ChangesPanel({ extensionUri: context.extensionUri });
+  // P1-1:编辑器内改动装饰(112GT 模式);watcher 变化/回滚/接受后刷新激活编辑器
+  let changeDecorations: WorkspaceChangeDecorationProvider;
+  let refreshDecorations: () => void;
   const watcher = new SnapshotWatcher(
     vscode.workspace.workspaceFolders?.map((f) => f.uri.fsPath) ?? [],
     (changes) => {
       changesPanel.post({ type: 'changes', items: toChangeItems(changes) });
+      refreshDecorations();
     },
   );
+  changeDecorations = new WorkspaceChangeDecorationProvider(() => watcher.listChanges());
+  refreshDecorations = (): void => changeDecorations.refreshActive();
+  disposables.add(changeDecorations);
   // 主 UI = 编辑器 WebviewPanel(宽面板容纳 dsh 完整布局,范式对齐社区实践);
   // 活动栏 view 提供"打开"入口节点
   const chatPanelHost = new ChatPanel({
@@ -138,15 +146,17 @@ export function activate(context: vscode.ExtensionContext): void {
   const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusItem.show();
   let cwdWarned = false;
+  let failureNotified = false;
 
   function updateStatusItem(state: RuntimeState, error?: string): void {
     if (state === 'connected') {
+      failureNotified = false; // 连接恢复后允许再次通知失败
       const cwd = runtime.description?.cwd;
       const mismatch = workspaceRoot !== '' && cwd !== undefined && cwd !== workspaceRoot;
       statusItem.text = mismatch ? '$(warning) dsh: cwd ≠ 工作区' : '$(broadcast) dsh: 已连接';
       statusItem.tooltip = mismatch
-        ? `实例 cwd = ${cwd}\n工作区 = ${workspaceRoot}\n(agent 操作的是实例 cwd)`
-        : `实例 cwd = ${cwd}\n模型 = ${runtime.description?.model}`;
+        ? `实例 cwd = ${cwd}\n工作区 = ${workspaceRoot}\n(agent 操作的是实例 cwd)\n点击重连`
+        : `dsh ${runtime.description?.version ?? ''}\nprovider=${runtime.description?.provider ?? ''}\n模型=${runtime.description?.model ?? ''}\ncwd=${cwd}\n点击重连`;
       if (mismatch && !cwdWarned) {
         cwdWarned = true;
         void vscode.window.showWarningMessage(
@@ -158,7 +168,12 @@ export function activate(context: vscode.ExtensionContext): void {
       statusItem.tooltip = error ?? '';
     } else {
       statusItem.text = '$(circle-slash) dsh: 未连接';
-      statusItem.tooltip = error ?? '';
+      statusItem.tooltip = (error ? `${error}\n` : '') + '点击重试连接';
+      // P0-1:连接失败对 UI 可见(一次性通知,防打扰;重试入口=状态栏点击/命令)
+      if (error && !failureNotified) {
+        failureNotified = true;
+        void vscode.window.showWarningMessage(`DeepSeek Harness:无法连接实例\n${error}\n(点击状态栏或运行命令重试)`);
+      }
     }
   }
 
@@ -394,6 +409,13 @@ export function activate(context: vscode.ExtensionContext): void {
     extensionUri: context.extensionUri,
     activeSessionId: state,
   };
+  // P1-2:权限模式三档同步(running 保护基于 controller 业务状态 + danger modal 确认)
+  context.subscriptions.push(
+    registerPermissionSync(
+      () => vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+      () => controller.currentState === 'running',
+    ),
+  );
   disposables.add(registerAsk(app));
   disposables.add(registerAgent(app));
   disposables.add(registerReview(app));
@@ -419,11 +441,38 @@ export function activate(context: vscode.ExtensionContext): void {
   // 仅注册 provider(不需要 TreeView API 的额外操作;文档:需要 TreeView API 才用 createTreeView)
   disposables.add(vscode.window.registerTreeDataProvider('deepseekHarness.sessions', sessionsTree));
   disposables.add(sessionsTree.startAutoRefresh());
+  // P0-1:重试连接命令(状态栏点击同入口);状态栏 command 绑定
+  const retryConnection = (): void => {
+    void runtime.connect().then(() => {
+      void vscode.window.showInformationMessage('DeepSeek Harness:已连接');
+    });
+  };
+  disposables.add(vscode.commands.registerCommand('deepseekHarness.retryConnection', retryConnection));
+  statusItem.command = 'deepseekHarness.retryConnection';
+  // P0-3:切换工作区文件夹后重新关联 dsh workspace + 刷新会话树 + 重估 cwd 一致性
+  disposables.add(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (wsPath) {
+        void ensureWorkspace(
+          vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+          wsPath,
+        ).catch(() => undefined);
+        void sessionsTree.refresh().catch(() => undefined);
+      }
+      cwdWarned = false;
+      updateStatusItem(runtime.currentState, runtime.lastError);
+    }),
+  );
   disposables.add(
     vscode.commands.registerCommand('deepseekHarness.switchSession', (sessionId: unknown) => {
       if (typeof sessionId !== 'string') return;
-      // 通知 webview 切换会话(boot 桥写 dsh.sessions.current + reload);扩展侧不缓存会话状态
+      // 通知 webview 切换会话(boot 桥写 dsh.sessions.current + 扩展重注入 html)
       chatPanel.post({ type: 'dsh:switch-session', sessionId });
+      // P1-5:原生切换也持久化活跃会话(与 session:open 路径对齐,重启恢复一致)
+      void rememberActiveSession(context, sessionId);
+      state.value = sessionId;
+      controller.setActiveSession(sessionId);
     }),
   );
   disposables.add(
@@ -471,6 +520,69 @@ export function activate(context: vscode.ExtensionContext): void {
       wsPath,
     ).catch(() => undefined);
   }
+
+  // P1-3:模型查看/选择 QuickPick(模型由 dsh 实例 provider 配置决定,扩展只读展示+指引)
+  disposables.add(
+    vscode.commands.registerCommand('deepseekHarness.selectModel', async () => {
+      const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
+      try {
+        const desc = await runtime.connect();
+        const body = await postRpc(current, 'settings.describe', {});
+        const nss = (body?.result?.value as { namespaces?: Array<{ ns: string; value?: { models?: Array<{ id: string; name?: string }> } }> } | undefined)?.namespaces ?? [];
+        const models = nss.find((n) => n.ns === 'llm-deepseek')?.value?.models ?? [];
+        const currentModel = desc.model;
+        const pick = await vscode.window.showQuickPick(
+          [
+            ...models.map((m) => ({
+              label: m.name ?? m.id,
+              description: m.id,
+              detail: m.id === currentModel ? '当前模型' : undefined,
+              id: m.id,
+            })),
+            {
+              label: '$(gear) 在 dsh web UI 中配置模型…',
+              description: '打开 http://127.0.0.1:3080 设置页',
+              id: 'open-web',
+            },
+          ],
+          { placeHolder: `当前模型:${currentModel}(provider:${desc.provider})` },
+        );
+        if (!pick) return;
+        if (pick.id === 'open-web') {
+          void vscode.env.openExternal(vscode.Uri.parse(current));
+        } else {
+          // 模型切换属 dsh 实例 provider 配置域;扩展不直接改 provider 配置(避免破坏实例)
+          void vscode.window.showInformationMessage(
+            `模型由 dsh 实例的 provider 配置决定(当前:${currentModel})。切换请在 dsh web UI 设置页操作。`,
+          );
+        }
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `读取模型列表失败:${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }),
+  );
+
+  // P2-1:验证连接命令(手动触发,输出 cwd/模型/版本一致性)
+  disposables.add(
+    vscode.commands.registerCommand('deepseekHarness.verifyConnection', async () => {
+      try {
+        const desc = await runtime.connect();
+        const cwdNote =
+          workspaceRoot !== '' && desc.cwd !== workspaceRoot
+            ? `\n⚠ 实例 cwd(${desc.cwd}) ≠ 工作区(${workspaceRoot})`
+            : '';
+        void vscode.window.showInformationMessage(
+          `✅ 已连接 dsh ${desc.version}\nprovider=${desc.provider}\n模型=${desc.model}\ncwd=${desc.cwd}${cwdNote}`,
+        );
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `连接失败:${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }),
+  );
 
   // P3-10:连接切换命令(写入配置 + runtime.rebase)
   disposables.add(

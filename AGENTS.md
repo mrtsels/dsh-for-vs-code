@@ -8,7 +8,7 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
 - 新能力挂官方扩展点:UI → `ctx.agents` + `session/event`;tool → `ctx.tools`;shell → `ctx.shell`;fs → `ctx.fs`;model → `ctx.llm`(TASK §0.5.9)
 - `src/agent/runtime.ts` 只做传输:不缓存状态、不含业务逻辑(薄桥)
 - UI 只从 `session/event` 渲染,**禁止自维护 messages[] 再同步**;model-visible 信息必须可从事件日志重建(TASK §0.5.3)
-- 文件写走 VS Code WorkspaceEdit(或 T-1 快照 diff + 回滚方案);terminal 走 VS Code Terminal API,禁裸 `child_process`
+- 文件写走 VS Code WorkspaceEdit(或 T-1 快照 diff + 回滚方案);terminal 走 VS Code Terminal API,禁裸 `child_process`(例外:只读 CLI 封装如 `git.ts` 的 `execFile` 仅用于查询类命令,须注释声明用途;agent 执行路径一律 Terminal API)
 
 ## 代码规范
 

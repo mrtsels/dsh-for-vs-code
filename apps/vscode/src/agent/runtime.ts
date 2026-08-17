@@ -74,6 +74,9 @@ export class HarnessRuntime {
     };
   }
 
+  /** 传输层事实:最后一次连接错误(供状态栏/tooltip 展示;断连后保留,重连成功清除) */
+  lastError?: string;
+
   get currentState(): RuntimeState {
     return this.state;
   }
@@ -166,6 +169,8 @@ export class HarnessRuntime {
 
   private emitStatus(state: RuntimeState, attempt: number, error?: string): void {
     this.state = state;
+    // 传输层事实:保留最后错误(断连后供状态栏展示;恢复连接时清除)
+    this.lastError = state === 'connected' ? undefined : error;
     const status: RuntimeStatus = { state, attempt, error };
     this.onStatus?.(status);
     for (const listener of this.statusListeners) listener(status);

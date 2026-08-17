@@ -19,6 +19,8 @@ const PREFERENCE_FIELD = 'preference';
 /** VS Code 设置读到的可选值 */
 export type LocaleSetting = 'follow-web' | 'zh' | 'en';
 export type ThemeSetting = 'follow-web' | 'light' | 'dark' | 'system';
+/** 权限三档(112GT 模式;与 dsh permission 命名空间的 preset 名一致) */
+export type PermissionSetting = 'read-only' | 'workspace-write' | 'danger-full-access';
 
 /** 从 3080 读 settings.describe,返回当前生效的 locale/theme 偏好 */
 export async function readWebPreferences(baseUrl: string): Promise<{ locale?: string; theme?: string }> {
@@ -40,7 +42,7 @@ export async function readWebPreferences(baseUrl: string): Promise<{ locale?: st
 /** 把 VS Code 设置写回 dsh 实例(仅具体值;follow-web 不写回) */
 export async function writeWebPreference(
   baseUrl: string,
-  ns: 'locale' | 'ui-theme',
+  ns: string,
   value: string,
 ): Promise<boolean> {
   try {
@@ -81,4 +83,45 @@ function cfgLocale(): LocaleSetting {
 
 function cfgTheme(): ThemeSetting {
   return vscode.workspace.getConfiguration('deepseekHarness').get<ThemeSetting>('theme', 'follow-web');
+}
+
+// ---- P1-2:权限模式三档(read-only / workspace-write / danger-full-access) ----
+// 与 dsh `permission.defaultPreset`(实测 preset 名一致)双向同步;
+// running 时禁止切换;danger 需 modal 确认,取消则回滚设置。
+
+const PERMISSION_NS = 'permission';
+const DEFAULT_PRESET_FIELD = 'defaultPreset';
+
+function cfgPermission(): PermissionSetting {
+  return vscode.workspace
+    .getConfiguration('deepseekHarness')
+    .get<PermissionSetting>('permissionMode', 'workspace-write');
+}
+
+export function registerPermissionSync(baseUrl: () => string, isRunning: () => boolean): vscode.Disposable {
+  return vscode.workspace.onDidChangeConfiguration(async (e) => {
+    if (!e.affectsConfiguration('deepseekHarness.permissionMode')) return;
+    const next = cfgPermission();
+    if (isRunning()) {
+      // running 保护(112GT):当前回合结束前禁止切换
+      void vscode.window.showWarningMessage('dsh: 请等待当前回合结束再切换权限模式');
+      return;
+    }
+    if (next === 'danger-full-access') {
+      const choice = await vscode.window.showWarningMessage(
+        '危险权限:允许 Harness 工具访问工作区外文件,且无逐项审批。',
+        { modal: true },
+        '确认使用',
+      );
+      if (choice !== '确认使用') {
+        // 取消 → 回滚设置为 workspace-write(danger 需显式确认)
+        await vscode.workspace.getConfiguration('deepseekHarness').update('permissionMode', 'workspace-write', true);
+        return;
+      }
+    }
+    const ok = await writeWebPreference(baseUrl(), PERMISSION_NS, next);
+    if (!ok) {
+      void vscode.window.showWarningMessage(`dsh: 无法写回实例权限设置(permissionMode=${next}),请确认实例在线`);
+    }
+  });
 }

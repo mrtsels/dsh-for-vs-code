@@ -37,6 +37,18 @@
         "title": "DeepSeek Harness: 切换实例地址"
       },
       {
+        "command": "deepseekHarness.retryConnection",
+        "title": "DeepSeek Harness: 重试连接"
+      },
+      {
+        "command": "deepseekHarness.verifyConnection",
+        "title": "DeepSeek Harness: 验证连接"
+      },
+      {
+        "command": "deepseekHarness.selectModel",
+        "title": "DeepSeek Harness: 查看/选择模型"
+      },
+      {
         "command": "deepseekHarness.switchSession",
         "title": "DeepSeek Harness: 切换会话",
         "icon": "$(arrow-swap)"
@@ -118,6 +130,17 @@
             "跟随系统"
           ],
           "description": "界面主题。默认跟随 web UI;选择具体主题会写回 dsh 实例设置并立即生效"
+        },
+        "deepseekHarness.permissionMode": {
+          "type": "string",
+          "enum": ["read-only", "workspace-write", "danger-full-access"],
+          "default": "workspace-write",
+          "enumDescriptions": [
+            "只读:agent 不能修改文件",
+            "工作区写:允许修改工作区内文件",
+            "全访问:允许访问工作区外文件且无逐项审批(需确认)"
+          ],
+          "description": "工具权限模式。写回 dsh 实例 permission 设置;danger-full-access 需确认,运行中不可切换"
         }
       }
     },
