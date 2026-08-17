@@ -181,6 +181,10 @@ const wsLayout = await page.evaluate(() => {
     })(),
     sessionRow: document.querySelector('[class$="_sessionRow"]') !== null,
     storedView: localStorage.getItem('dsh.ui.view'),
+    sidebarRootWidth: (() => {
+      const rootEl = document.querySelector('[class$="_sidebarCol"] [class*="_root "]');
+      return rootEl === null ? -1 : Math.round(rootEl.getBoundingClientRect().width);
+    })(),
   };
 });
 await page.screenshot({ path: '/tmp/dsh-phase9-workspaces.png' });
@@ -236,6 +240,7 @@ if (!wsLayout.backWorkspaces) failures.push('Workspaces 模式缺少悬浮返回
 if (!wsLayout.logoRowVisible) failures.push('Workspaces 模式 logo 行丢失(用户要求保留 logo)');
 if (!wsLayout.toggleHidden) failures.push('Workspaces 模式折叠钮未隐藏');
 if (!wsLayout.fullWidthCol) failures.push(`Workspaces 模式非单栏全宽:grid=${wsLayout.grid}`);
+if (wsLayout.sidebarRootWidth < 1000) failures.push(`Workspaces 模式内容未撑满(根宽度=${wsLayout.sidebarRootWidth}px,应≈1100)`);
 if (wsLayout.storedView !== 'workspaces') failures.push('视图偏好未持久化(dsh.ui.view)');
 if (wsLayout.sessionRow && !autoBack) failures.push('点击会话行未自动返回对话模式');
 if (!autoBack && !backExit) failures.push('未能退出 Workspaces 模式(会话行自动返回与悬浮按钮均未生效)');

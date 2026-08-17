@@ -225,6 +225,19 @@ export function activate(context: vscode.ExtensionContext): void {
             chatPanel.post({ type: 'dsh:bootstrap-session', sessionId: bootId });
           }
         }
+        // Phase 9:语言强化 —— 每次 webview 就绪都按 VS Code 设置强制对齐实例 locale
+        // (幂等;不一致则写回并重载,保证"改设置必生效",不依赖用户改设置那一刻)
+        {
+          const cfgLocale = vscode.workspace.getConfiguration('deepseekHarness').get<string>('locale', 'follow-web');
+          if (cfgLocale === 'zh' || cfgLocale === 'en') {
+            void syncLocaleToInstance(
+              vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+              cfgLocale,
+            ).then((changed) => {
+              if (changed) chatPanelHost.reload(vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl));
+            });
+          }
+        }
         break;
       case 'ask':
         await askWithContext(request.text);
@@ -519,6 +532,23 @@ export function activate(context: vscode.ExtensionContext): void {
     const body = await postRpc(current, 'session.create', {});
     const sessionId = (body?.result?.value as { sessionId?: string } | undefined)?.sessionId;
     return typeof sessionId === 'string' ? sessionId : undefined;
+  };
+  // 语言强制对齐:读实例 locale.preference,与目标不一致则 settings.update 写回
+  const syncLocaleToInstance = async (current: string, target: string): Promise<boolean> => {
+    try {
+      const body = await postRpc(current, 'settings.describe', {});
+      const namespaces = (body?.result?.value as
+        | { namespaces?: Array<{ ns: string; value?: Record<string, unknown> }> }
+        | undefined)?.namespaces;
+      const currentLocale = namespaces?.find((n) => n.ns === 'locale')?.value?.preference;
+      if (currentLocale === target) return false;
+      await postRpc(current, 'settings.update', { ns: 'locale', patch: { preference: target } });
+      return true;
+    } catch (error) {
+      // 实例不可达:静默,下次 ready 重试
+      logger.warn(`语言对齐失败:${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   };
 
   // P1-3:模型查看/选择 QuickPick(模型由 dsh 实例 provider 配置决定,扩展只读展示+指引)

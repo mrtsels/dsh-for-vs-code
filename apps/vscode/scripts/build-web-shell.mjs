@@ -270,8 +270,11 @@ body, body[data-ds-dark-theme] {
 body.dsh-workspaces { overflow: hidden !important; }
 body.dsh-workspaces #root { width: max(1100px, 100vw) !important; }
 body.dsh-workspaces [class$="_frame"] { grid-template-columns: minmax(0, 1fr) 0px 0px !important; }
-/* SidebarRoot 根元素上游内联 width(280px 拖拽偏好)会限制内容宽度 → 覆盖为 auto 撑满 */
-body.dsh-workspaces [class$="_sidebarCol"] > [class$="_root"] { width: auto !important; }
+/* SidebarRoot 根元素上游内联 width(280px 拖拽偏好)会限制内容宽度 → 覆盖为 100% 撑满。
+   坑:[class$="_root"] 匹配"整个 class 属性值"以 _root 结尾 —— 根元素是 root+quietBars
+   双类(整值以 quietBars 结尾)会漏匹配;必须用 [class*="_root"](子串)。
+   slot 渲染在 sidebarCol 内还有 display:contents 包裹层,用后代选择器。 */
+body.dsh-workspaces [class$="_sidebarCol"] [class*="_root "] { width: 100% !important; }
 body.dsh-workspaces [class$="_logoRow"] { padding-left: 40px !important; }
 body.dsh-workspaces [class$="_toggle"] { display: none !important; }
 
@@ -444,7 +447,8 @@ const BRIDGE_JS = `(() => {
     const sessionRow = target.closest('[class$="_sessionRow"]');
     const newSession = target.closest('[class$="_newSession"]');
     if (sessionRow !== null || newSession !== null) {
-      window.setTimeout(() => { setView('chat'); }, 150);
+      // 延迟略长:给上游打开会话(open/connect)留时间,退出后对话页即显示目标会话
+      window.setTimeout(() => { setView('chat'); }, 400);
     }
   }, true);
   // 应用渲染后接管:轮询等 root 就绪 → 恢复视图偏好 → 持续观察 title 行子节点变化
