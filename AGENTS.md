@@ -79,8 +79,14 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
   判断 UI 故障(上游正确渲染会话内错误消息)
 - 设置写回统一走 `settings.update({ns, patch})`(上游 store 同款);`settings.mutate` 载荷不同,勿混用;
   permission 命名空间 schema 只有 `defaultPreset` 可写(`preference` 是运行态镜像,写了无效)
+- **locale 由 settings 快照决定,但 boot 加载是竞态**(实测):connection 未就绪时上游
+  settings.describe 失败 → 快照 undefined → 语言 = navigator.language(中文系统=中文),且
+  实例值已等于目标时无推送可触发 → 永不纠正。修复:注入 __DSH_LOCALE__(VS Code 设置),
+  bridge 检测 UI 语言(tab 文本)→ 不符则写实例触发 settings/document-updated 推送 →
+  上游 refresh → 热切换;值相同用"双写对调值再写回"强制推送
 - **locale 运行中不热切换**(实测):settings.update 写 locale.preference 后,已打开的 webview 界面
-  语言不变(仅 boot 时应用);扩展在写回成功后重载 webview(settings-bridge onLocaleApplied → chat-panel reload)
+  语言不变(仅 boot 时应用);扩展在写回成功后重载 webview(settings-bridge onLocaleApplied → chat-panel reload);
+  语言对齐主通道 = bridge 的 __DSH_LOCALE__ 同步(boot 后自动,无需 reload)
 - **"Deep diving..." 状态行**:上游硬编码品牌蓝渐变(--dsw-static-deepseek-*)做 shimmer 文字;
   shell.css 覆盖为 `--dsh-host-accent` 渐变,但**必须用 background-image 而非 background 简写**
   (简写会重置 background-clip:text → 文字透明只剩色块);background-clip/-webkit 前缀显式保留

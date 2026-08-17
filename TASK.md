@@ -14,9 +14,10 @@
 > 每次 webview ready 按 VS Code 设置强制对齐实例 locale,改设置必生效)。
 > Workspaces 撑满根因修正:SidebarRoot 根是 root+quietBars 双类,属性选择器按整个 class 值
 > 匹配会漏 —— 改用词尾含空格匹配,设 width:100% 真正撑满。
-> webview 内"新会话"按钮拦截:上游 startSession 落在最近 workspace(不保证 VS Code 目录),
-> 改为 bridge 拦截 → 扩展 ensureFolderSession(当前目录)→ bootstrap-session 进入;
-> logo wordmark 快捷方式一并拦截。
+> 语言根因(2026-08-18 实测):webview boot 时 connection 未就绪 → 上游 settings 快照加载
+> 失败 → locale 用浏览器语言(navigator.language,中文系统=中文),且值相同时无推送不纠正。
+> 修复:注入 __DSH_LOCALE__(VS Code 设置),boot 桥检测 UI 语言(tab 文本)→ 不符则写实例
+> (值不同单写/值相同双写对调再写回)触发推送 → 上游热切换,无需 reload。
 > 待用户:扩展宿主窗口视觉确认(双击 启动扩展.command)。
 
 > 本版重写原因(2026-08-17 用户决策):
