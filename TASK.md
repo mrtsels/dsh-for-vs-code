@@ -1,6 +1,12 @@
 # TASK.md — dsh-for-vs-code 实施任务书(2026-08-17 重写:Route A 源码构建路线)
 
 > **进度快照(2026-08-18 Phase 9)**:Phase 5 ✅ / 6 ✅ / 7 🔶(P7-1 人工回归待用户)/ 8 🔶(G1 PASS)。
+> **Phase 10(2026-08-21 用户需求,实施完成待冒烟/人工)**:VS Code 原生文件/选区附着 ——
+> 1) Explorer 文件原生拖入 webview 附着(text/uri-list;目录拒绝/1MiB/20k/100k 上限);
+> 2) 可选附着活动文件(deepseekHarness.context.attachActiveFile,发送瞬间快照含未保存改动);
+> 3) 可选附着活动选区(attachSelection,实时状态 + 多光标 + 整文件去重)。
+> 按高级模型规格实现(bridge 白名单 + context-attachments 管理器 + attachment-format 纯函数 +
+> web/dsh-attachment-ui.ts 注入 UI + shell 装配注入);G0 四门绿;手动清单 docs/manual-tests/phase-10.md。
 > **Phase 9(UI/UX 定制)**:P9-1 ✅(仅对话面板 + Workspaces 页;返回按钮改 body 固定悬浮,
 > React 重渲染不清除)、P9-2 ✅(仅 Chat 视图)、P9-3 ✅(--dsw-* 全量映射 VS Code 变量 +
 > heroGlow 蓝色 SVG 覆盖)、P9-4 ✅(bootstrap 模块 + __DSH_BOOT_SESSION__)、
@@ -215,6 +221,49 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 - [x] P9-6 G0 四门绿(typecheck/lint 0/test 55+@live 57/build)+ smoke-shell 布局断言全 PASS
       (侧栏 0 宽/返回按钮 body 直接子节点/Workspaces 页切换/自动返回)+ 三视图截图 vision 验证
 
+### Phase 10:VS Code 原生文件/选区附着(2026-08-21 用户需求)
+
+需求(用户原文):
+1. **原生可拖拽 VS Code explorer 的文件** —— 从 Explorer 拖文件到 webview 对话输入区,
+   附着为待发送上下文(文件内容/路径随消息发送),与上游输入框共存。
+2. **原生可选择是否附着 VS Code 正在打开的文件** —— 可开关(设置 + UI 指示),开启后发送
+   消息时自动携带当前活动文件内容(含未保存改动)。
+3. **原生可选择是否附着 VS Code 正在打开的文件中已选择的内容** —— 可开关,开启后自动携带
+   当前活动编辑器选区(行列 + 文本)。
+
+现状核查(2026-08-21,实施前基线):
+- 上游 ui-conversation 输入框**无附着/拖放机制**(vendor 源码无 dataTransfer/ondrop);红线
+  禁改 vendor → 附着 UI/拖放监听只能走既有桥注入模式(shell.css + nonce 脚本 + document
+  capture + postMessage 白名单),与会话管理页/输入行 title 注入同范式。
+- 可复用:src/vscode/editor.ts `collectEditorContext`(活动文件相对路径 + 选区 ≤20k 截断)、
+  src/agent/context.ts `formatEditorContext`(<editor-context> 前缀,askWithContext 已用)、
+  src/webview/bridge.ts(WebviewRequest/ExtensionMessage 类型化 union + 白名单校验)、
+  src/webview/shell-html.ts(nonce 注入点,__DSH_* 变量)。
+- 拖放机制(实测线索):Explorer→webview 拖放,VS Code 在 DataTransfer 注入 `vscode.Resource`
+  MIME(JSON URI 数组);已知坑:CustomEditor 类 webview 拖放曾失效(vscode#182449),普通
+  WebviewView 需实测;OS 桌面拖文件为 `Files`/`text/uri-list`,webview iframe 内取真实路径
+  需确认 `webUtils.getPathForFile` 可用性(版本/环境)。
+- 附着语义 = 文本注入(dsh 运行时仅 text 消息,无附件 RPC):"附着" = 消息前缀块 + webview 内
+  可移除 chip 指示;文件读取走 `vscode.workspace.fs`(扩展侧),webview 只传 URI 与开关状态。
+- 高级模型技术方案询问提示词:docs/prompt-attach-vscode-files.md(含现状/红线/问题清单/输出格式)。
+
+- [x] P10-1 询问提示词落盘(docs/prompt-attach-vscode-files.md),交用户询问高级模型(规格已回贴)
+- [x] P10-2 **Explorer 文件原生拖入附着**:web/dsh-attachment-ui.ts(document capture 拖放监听,
+      text/uri-list 解析 + webUtils feature-detect 降级)→ bridge dsh:attachments:add(白名单 1..16,
+      uri ≤8k)→ context-attachments.addUris(Uri.parse/stat/目录拒绝/去重/上限)→ 发送时
+      workspace.fs 读取(1MiB 上限/二进制检测/20k 截断/总量 100k)→ formatSendContext 组装
+- [x] P10-3 **附着活动文件**:设置 deepseekHarness.context.attachActiveFile + toggleAttachActiveFile
+      命令 + chip 开关;onDidChangeActiveTextEditor/onDidChangeConfiguration 推送状态;发送瞬间
+      document.getText() 快照(含未保存改动/untitled);无编辑器禁用
+- [x] P10-4 **附着活动选区**:设置 attachSelection + 命令 + chip;onDidChangeTextEditorSelection
+      50ms 防抖;多光标全选区;空选区禁用;选区覆盖整文件与 full-file 去重
+- [x] P10-5 G0 四门绿(typecheck/lint 0/test 91 含 33 个附着单测/build)+ smoke-shell 扩展断言已加入
+      (状态注入→chip 渲染、模拟 text/uri-list drop→回传 add,实测 Phase 10 断言全过)+ 手动清单
+      docs/manual-tests/phase-10.md。冒烟整体通过**待重跑**:脚本此前加载到 blank 会话导致既有
+      "返回按钮在 title 行内"断言必失败(环境性,与 Phase 10 无关),已修脚本(优先选非 blank 会话);
+      下次冒烟 + VS Code 内真机验证由用户安排
+
+
 ## 4. 阶段门与验收(沿用)
 
 - G0 提交门:typecheck / lint / test / build 全绿;集成测试 @live 可跳过。
@@ -232,6 +281,9 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 | R4 | resolveBase 适配缝随上游漂移 | 连接失败 | 断言式替换(缺文本即构建失败);升级专项 |
 | R5 | 静态组图与上游图不一致(漏/多插件) | 功能缺失/重复 | P5-4 与现存 rc.6 抓取图集合核对 |
 | R6 | 产物体积/加载性能 | 侧边栏慢 | 复用上游 vendor chunk 策略;按需分包 |
+| R7 | 上游输入框冻结:附着 UI/拖放只能桥注入(document capture + MutationObserver) | 注入层与上游重渲染冲突、chip 被清除 | 沿用会话页/title 行既有注入模式;冒烟断言;升级专项回归 |
+| R8 | webview 拖放可靠性与路径获取(vscode.Resource MIME 形状、webUtils 可用性、CustomEditor 类已知坑) | 拖入无响应/拿不到路径 | document 级 capture + dragover preventDefault;降级入口(命令/QuickPick 选文件);实测确认 |
+| R9 | 大文件/二进制/超大选区 → 上下文膨胀 | 消息超限、模型劣化 | 大小上限 + 截断(沿用 20k)+ 二进制检测(语言/空字节)+ 可降级为仅路径引用 |
 
 ## 6. 执行
 

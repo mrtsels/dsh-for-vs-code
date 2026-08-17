@@ -475,6 +475,56 @@ body, body[data-ds-dark-theme] {
   background-clip: text !important;
   -webkit-background-clip: text !important;
 }
+
+/* ---- Phase 10 附着 UI(注入输入区上方;dsh-attachment-ui.js 渲染,shell.css 提供样式) ---- */
+#dsh-attachment-root {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 4px 10px 0; position: relative; z-index: 30;
+}
+body.dsh-sessions #dsh-attachment-root { display: none !important; }
+.dsh-drop-overlay {
+  position: fixed; inset: 0; z-index: 100; pointer-events: none;
+  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 10%, transparent);
+  display: none;
+}
+body.dsh-dragging .dsh-drop-overlay { display: block; }
+.dsh-attach-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  min-height: 24px;
+}
+.dsh-attach-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  max-width: 240px; box-sizing: border-box;
+  padding: 2px 8px; border-radius: 10px;
+  border: 1px solid var(--dsw-alias-border-l2, var(--dsh-host-border));
+  background: var(--dsh-host-bg);
+  color: var(--dsw-alias-label-secondary, var(--dsh-host-fg));
+  font-size: 11px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dsh-attach-toggle { cursor: pointer; }
+.dsh-attach-toggle:hover { background: var(--dsh-host-hover); }
+.dsh-attach-toggle.on {
+  border-color: var(--dsh-host-link, var(--dsh-host-accent));
+  color: var(--dsh-host-link, var(--dsh-host-accent));
+  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 12%, var(--dsh-host-bg));
+}
+.dsh-attach-toggle.disabled { opacity: 0.45; cursor: default; }
+.dsh-attach-toggle.disabled:hover { background: var(--dsh-host-bg); }
+.dsh-attach-file { max-width: 200px; }
+.dsh-attach-file.warning { border-color: var(--dsh-host-warn); color: var(--dsh-host-warn); }
+.dsh-attach-remove {
+  border: none; background: transparent; color: inherit; cursor: pointer;
+  font-size: 13px; line-height: 1; padding: 0 0 0 2px; opacity: 0.7;
+}
+.dsh-attach-remove:hover { opacity: 1; }
+.dsh-attach-toast {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+  z-index: 120; max-width: 86%;
+  padding: 6px 12px; border-radius: 8px;
+  background: var(--dsh-host-tooltip-bg); color: var(--dsh-host-error);
+  border: 1px solid var(--dsh-host-error);
+  font-size: 12px; line-height: 18px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
 `;
 
 const shortId = (id) => id.replace('@deepseek-ai/', '');
@@ -873,15 +923,25 @@ async function main() {
     );
   }
   cpSync(sessionViewSrc, join(dest, 'session-view.js'));
+  // Phase 10 附着 UI bundle(web/dsh-attachment-ui.ts → dist/web/dsh-attachment-ui.js,
+  // 由 scripts/build.mjs 构建):拷入 dsh-shell 并在 </body> 前注入(输入区上方工具栏)。
+  const attachUiSrc = join(repoRoot, 'apps', 'vscode', 'dist', 'web', 'dsh-attachment-ui.js');
+  if (!existsSync(attachUiSrc)) {
+    throw new Error(
+      `附着 UI bundle 缺失:${attachUiSrc}(先跑 pnpm --filter dsh-for-vscode run build)`,
+    );
+  }
+  cpSync(attachUiSrc, join(dest, 'dsh-attachment-ui.js'));
   const shellHtml = join(dest, 'index.html');
   if (!existsSync(shellHtml)) throw new Error(`shell index.html 缺失:${shellHtml}`);
   // 绝对路径改相对;去掉 manifest/favicon(webview 内 404,同时不随 VSIX 分发);
-  // 注入会话管理页挂载点(独立于上游 #root,默认 hidden,bridge 切换视图时显示)
+  // 注入会话管理页挂载点(独立于上游 #root,默认 hidden,bridge 切换视图时显示);
+  // 注入附着 UI 脚本(对话输入区上方工具栏 + 拖放监听)
   let html = readFileSync(shellHtml, 'utf8')
     .replace(/(src|href)="\//g, '$1="./')
     .replace(/<link rel="manifest"[^>]*>\s*/g, '')
     .replace(/<link rel="icon"[^>]*>\s*/g, '')
-    .replace(/<\/body>/i, '<div id="dsh-sessions-root" hidden></div><script src="./session-view.js"></script></body>');
+    .replace(/<\/body>/i, '<div id="dsh-sessions-root" hidden></div><script src="./session-view.js"></script><script src="./dsh-attachment-ui.js"></script></body>');
   writeFileSync(shellHtml, html);
   rmSync(join(dest, 'manifest.webmanifest'), { force: true });
   rmSync(join(dest, 'favicon.svg'), { force: true });

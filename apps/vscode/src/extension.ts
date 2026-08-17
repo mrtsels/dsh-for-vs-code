@@ -17,10 +17,10 @@ import { SnapshotWatcher } from './vscode/workspace.js';
 import { WorkspaceChangeDecorationProvider } from './vscode/workspace-decoration.js';
 import { HttpProxy } from './vscode/proxy.js';
 import { runCommandInTerminal } from './vscode/terminal.js';
-import { collectEditorContext } from './vscode/editor.js';
 import { collectDiagnostics, countWorkspaceDiagnostics } from './vscode/diagnostics.js';
 import { gitChanges } from './vscode/git.js';
-import { formatEditorContext, type EditorContext } from './agent/context.js';
+import { ContextAttachmentManager } from './vscode/context-attachments.js';
+import { composeFinalMessage } from './vscode/attachment-format.js';
 import { Logger } from './util/logger.js';
 import { DisposableSet } from './util/dispose.js';
 import { registerAsk } from './commands/ask.js';
@@ -110,6 +110,31 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     post: (message) => chatPanelHost.post(message),
     reload: (url) => chatPanelHost.reload(url),
   };
+
+  // ---- Phase 10 附着管理器(文件/选区)----
+  // 状态推送 → webview;错误(拖入/读取失败)→ webview toast。订阅与 dispose 由管理器自持。
+  const attachmentManager = new ContextAttachmentManager(
+    (state) => {
+      chatPanel.post({ type: 'dsh:attachments:state', state });
+    },
+    (error) => {
+      chatPanel.post({ type: 'dsh:attachments:error', code: error.code, message: error.message });
+    },
+  );
+  disposables.add({ dispose: () => attachmentManager.dispose() });
+  // 命令:切换附着开关(设置 + webview chip 双入口;设置变化经 onDidChangeConfiguration 推送)
+  disposables.add(
+    vscode.commands.registerCommand('deepseekHarness.toggleAttachActiveFile', async () => {
+      const current = vscode.workspace.getConfiguration('deepseekHarness').get<boolean>('context.attachActiveFile', false);
+      await attachmentManager.setActiveFileEnabled(!current);
+    }),
+  );
+  disposables.add(
+    vscode.commands.registerCommand('deepseekHarness.toggleAttachSelection', async () => {
+      const current = vscode.workspace.getConfiguration('deepseekHarness').get<boolean>('context.attachSelection', false);
+      await attachmentManager.setSelectionEnabled(!current);
+    }),
+  );
 
   // ---- runtime / sessions / controller ----
   const runtime = new HarnessRuntime({
@@ -245,6 +270,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             });
           }
         }
+        // Phase 10:webview 就绪即推附着状态(附着 UI 的 dsh:attachments:ready 兜底)
+        chatPanel.post({ type: 'dsh:attachments:state', state: attachmentManager.getState() });
+        break;
+      // ---- Phase 10 附着 ----
+      case 'dsh:attachments:ready':
+        chatPanel.post({ type: 'dsh:attachments:state', state: attachmentManager.getState() });
+        break;
+      case 'dsh:attachments:add':
+        await attachmentManager.addUris(request.attachments.map((a) => a.uri));
+        break;
+      case 'dsh:attachments:remove':
+        attachmentManager.removeAttachment(request.attachmentId);
+        break;
+      case 'dsh:attachments:toggle':
+        if (request.kind === 'activeFile') await attachmentManager.setActiveFileEnabled(request.enabled);
+        else await attachmentManager.setSelectionEnabled(request.enabled);
         break;
       case 'ask':
         await askWithContext(request.text);
@@ -391,8 +432,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const askWithContext = async (question: string): Promise<void> => {
     try {
-      // P2-1/P2-2:编辑器上下文 + 活动文件诊断 + (含 git 语义时)git 摘要 → 前缀注入
-      const editorCtx = collectEditorContext(workspaceRoot);
+      // P2-1/P2-2:活动文件诊断 + (含 git 语义时)git 摘要 → 前缀注入;
+      // Phase 10:附着(活动文件/选区开关 + 拖入文件)由 attachmentManager.collectForSend 组装
       const activeFileDiag = collectDiagnostics(vscode.window.activeTextEditor?.document.uri);
       const gitMap = new Map<string, { additions: number; deletions: number }>();
       if (/git|status|diff|改动|未提交|commit|提交/i.test(question)) {
@@ -400,9 +441,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         for (const [path, v] of g.files) gitMap.set(path, { additions: v.additions, deletions: v.deletions });
         if (g.error) logger.warn(`git 摘要失败:${g.error}`);
       }
-      const full: EditorContext = { ...editorCtx, diagnostics: activeFileDiag, gitChanges: gitMap };
-      const block = formatEditorContext(full);
-      const finalText = block === '' ? question : `${block}\n\n${question}`;
+      const { text: contextText, warnings } = await attachmentManager.collectForSend({
+        diagnostics: activeFileDiag,
+        gitChanges: [...gitMap].map(([path, v]) => ({ path, additions: v.additions, deletions: v.deletions })),
+      });
+      for (const warning of warnings) logger.warn(`[attachments] ${warning}`);
+      const finalText = composeFinalMessage(question, contextText);
       await runtime.connect();
       let sessionId = state.value;
       if (!sessionId) {

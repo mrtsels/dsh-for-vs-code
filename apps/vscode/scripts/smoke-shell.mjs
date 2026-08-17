@@ -84,6 +84,8 @@ page.on('pageerror', (e) => consoleMsgs.push(`[pageerror] ${String(e).slice(0, 3
 page.on('requestfailed', (r) => consoleMsgs.push(`[requestfailed] ${r.url()} ${r.failure()?.errorText ?? ''}`));
 page.on('response', (r) => { if (r.status() >= 400) consoleMsgs.push(`[http ${r.status()}] ${r.url()}`); });
 // 取一个真实会话 id 注入 __DSH_BOOT_SESSION__(验证 boot 桥条件写入路径);
+// 优先取非 blank 会话(有标题):blank 会话 header 隐藏(无 title 行),会让
+// "返回按钮在 title 行内"断言必失败 —— 环境性问题,冒烟应避开 blank 会话。
 // fetch 必须带超时,否则实例无响应时脚本挂起
 let bootSessionId = undefined;
 try {
@@ -93,7 +95,11 @@ try {
     body: JSON.stringify({ type: 'client-request', rpcId: 'smoke-boot', method: 'session.list', payload: {} }),
     signal: AbortSignal.timeout(3000),
   }).then((r) => r.json());
-  bootSessionId = listBody?.result?.value?.items?.[0]?.sessionId;
+  const items = listBody?.result?.value?.items;
+  const titled = Array.isArray(items)
+    ? items.find((it) => it?.projections?.values?.title !== undefined && it.projections.values.title !== '')
+    : undefined;
+  bootSessionId = titled?.sessionId ?? (Array.isArray(items) ? items[0]?.sessionId : undefined);
 } catch { /* 实例不可达:跳过 boot-session 注入 */ }
 await page.addInitScript((args) => {
   window.__DSH_WEB_URL__ = args.relay;
@@ -135,6 +141,7 @@ const bridgeOk = await page.evaluate(() => {
     setTimeout(() => resolve(localStorage.getItem('dsh.sessions.current') !== null), 1500);
   });
 });
+console.log('[smoke] bridgeOk 完成,进入布局断言…');
 // ---- Phase 9 布局断言:对话模式(仅中心列)→ 会话管理页(独立 React 视图) ----
 const chatLayout = await page.evaluate(() => {
   const frame = document.querySelector('[class$="_frame"]');
@@ -152,6 +159,7 @@ const chatLayout = await page.evaluate(() => {
   };
 });
 await page.screenshot({ path: '/tmp/dsh-phase9-chat.png' });
+console.log('[smoke] 进入会话管理页…');
 // 进入会话管理页(bridge 切视图:隐藏 #root,显示 #dsh-sessions-root)
 await page.click('.dsh-back-button');
 await page.waitForTimeout(1200);
@@ -208,6 +216,7 @@ if (sessionsLayout.rows > 0) {
     });
   });
 }
+console.log('[smoke] 会话行跳转完成,窄宽度检查…');
 // 窄宽度横向溢出检查(会话页 + 对话模式)
 await page.setViewportSize({ width: 320, height: 600 });
 await page.waitForTimeout(400);
@@ -232,6 +241,59 @@ if (backBtn !== null) {
       && sessionsRoot !== null && sessionsRoot.hidden;
   });
 }
+console.log('[smoke] 返回对话模式,Phase 10 附着断言…');
+// ---- Phase 10 附着 UI 断言(对话模式)----
+// 1) 注入宿主状态(模拟扩展推送 dsh:attachments:state)→ 工具栏渲染开关 chip 与文件 chip
+await page.evaluate(() => {
+  window.postMessage({
+    type: 'dsh:attachments:state',
+    state: {
+      activeFileEnabled: true,
+      selectionEnabled: true,
+      activeFileAvailable: true,
+      selectionAvailable: true,
+      activeFile: { path: 'src/a.ts', languageId: 'typescript', isDirty: false, isUntitled: false },
+      selections: [{ startLine: 3, startCol: 1, endLine: 5, endCol: 10, charCount: 40 }],
+      attachments: [
+        { id: 'smoke-1', uri: 'file:///workspace/a.ts', name: 'a.ts', size: 42, displayPath: 'a.ts', outsideWorkspace: false },
+      ],
+    },
+  }, '*');
+});
+await page.waitForTimeout(500);
+const attachUi = await page.evaluate(() => {
+  const root = document.getElementById('dsh-attachment-root');
+  return {
+    rootPresent: root !== null,
+    composerCard: document.querySelector('[data-composer-card]') !== null,
+    toggles: [...document.querySelectorAll('.dsh-attach-toggle')].map((b) => ({
+      kind: b.getAttribute('data-kind'),
+      on: b.classList.contains('on'),
+      disabled: b.classList.contains('disabled'),
+    })),
+    fileChips: document.querySelectorAll('.dsh-attach-file').length,
+  };
+});
+// 2) 模拟 Explorer 拖放(text/uri-list)→ 附着 UI 回传 dsh:attachments:add
+const dropMsg = await page.evaluate(() => new Promise((resolve) => {
+  const onMsg = (e) => {
+    const d = e.data;
+    if (d && typeof d === 'object' && d.type === 'dsh:attachments:add') {
+      window.removeEventListener('message', onMsg);
+      resolve(d);
+    }
+  };
+  window.addEventListener('message', onMsg);
+  try {
+    const dt = new DataTransfer();
+    dt.setData('text/uri-list', ['file:///workspace/a.ts', 'file:///workspace/b.ts'].join('\r\n'));
+    document.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  } catch (err) {
+    window.removeEventListener('message', onMsg);
+    resolve({ error: String(err) });
+  }
+  setTimeout(() => { window.removeEventListener('message', onMsg); resolve(null); }, 1500);
+}));
 // ---- 断言(裁剪模式下应全绿)----
 const failures = [];
 if (state.rootChildren < 1) failures.push('UI 未渲染(root 空)');
@@ -278,3 +340,21 @@ if (sessionsLayout.rows > 0) {
 if (!narrowOverflow.noHScroll) failures.push('320px 出现横向滚动(违规)');
 // 返回对话模式(React header 返回 → __dshBridge.setView)
 if (!backExit) failures.push('会话页 header 返回按钮未能切回对话模式');
+// Phase 10 附着 UI 断言:状态注入 → 开关/文件 chip 渲染;模拟 Explorer 拖放 → 回传 add
+if (!attachUi.composerCard) failures.push('对话模式缺少上游 composer(data-composer-card)');
+if (!attachUi.rootPresent) failures.push('附着 UI 根节点未注入(#dsh-attachment-root)');
+if (attachUi.toggles.length < 2) failures.push(`附着开关 chip 缺失(${attachUi.toggles.length})`);
+const activeToggle = attachUi.toggles.find((t) => t.kind === 'activeFile');
+if (activeToggle === undefined || !activeToggle.on) failures.push('activeFile 开关未按状态渲染(on)');
+if (activeToggle !== undefined && activeToggle.disabled) failures.push('activeFile 开关错误禁用(编辑器可用)');
+if (attachUi.fileChips < 1) failures.push('附着文件 chip 未渲染');
+if (dropMsg === null || dropMsg.error !== undefined || dropMsg.attachments?.length !== 2) {
+  failures.push(`拖放未回传 dsh:attachments:add:${JSON.stringify(dropMsg)}`);
+}
+// ---- 结果输出与退出码(断言收集完毕,统一判定;failures 非空即 FAIL)----
+if (failures.length > 0) {
+  console.log(`SMOKE FAIL(${failures.length}):`);
+  for (const f of failures) console.log('  - ' + f);
+  process.exit(1);
+}
+console.log('SMOKE PASS: 全部断言通过');

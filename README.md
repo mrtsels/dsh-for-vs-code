@@ -27,7 +27,8 @@ dsh web 实例 @ 127.0.0.1:3080(同一 runtime,第 N 个 viewer)
 - **首开体验**:首次打开(或新文件夹)自动进入以当前工作区为 workspace 的新会话
 - **设置映射**:agentPreset / permissionMode / locale / theme / busyEnter 与 dsh 实例设置一一对应、双向同步,真实可改
 - **改动审查**:agent 写盘被快照捕获 → diff 面板 → 一键回滚/接受(`DeepSeek Harness: Review Changes`)
-- **编辑器上下文**:Ask 时自动注入当前文件/选区/诊断;问 git 时注入工作区改动摘要
+- **编辑器上下文**:Ask 时自动注入当前文件/诊断;问 git 时注入工作区改动摘要
+- **文件/选区附着(Phase 10)**:从 VS Code Explorer 拖文件到对话输入区 → 附着为可移除 chip,发送时文件内容随消息注入;输入区上方开关可随时切换「附着活动文件」(含未保存改动)与「附着选中内容」(含行列);大文件/二进制/目录自动降级(1 MiB 不读正文、20k 截断、附件总量 100k)
 - **审批**:工具请求执行时弹出原生通知(允许一次/拒绝)
 - **终端**:面板内"终端"输入命令,输出可捕获回传 UI
 - **原生入口**:VS Code Chat 面板(`@DeepSeek Harness` participant)、编辑器右键"dsh: 解释选中代码 / Ask to fix 诊断"、Code Actions

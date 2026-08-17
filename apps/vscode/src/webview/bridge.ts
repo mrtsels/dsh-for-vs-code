@@ -35,6 +35,15 @@ export type WebviewRequest =
   | { type: 'dsh:locale-mismatch' }
   // 上游 accept/adopt 注入日志转发(诊断)
   | { type: 'dsh:console'; kind: string; text: string }
+  // ---- Phase 10 附着(文件/选区)----
+  // webview 附着 UI 就绪(扩展推送 dsh:attachments:state)
+  | { type: 'dsh:attachments:ready' }
+  // Explorer/OS 拖入文件(webview 只传 URI,内容由扩展侧读取)
+  | { type: 'dsh:attachments:add'; attachments: readonly { uri: string }[] }
+  // 移除附着文件 chip
+  | { type: 'dsh:attachments:remove'; attachmentId: string }
+  // 附着开关(活动文件 / 活动选区)
+  | { type: 'dsh:attachments:toggle'; kind: AttachmentToggleKind; enabled: boolean }
   // 内部调试通道:webview 内 error/unhandledrejection 转发(不入 validateWebviewRequest 白名单,
   // 仅 ChatViewProvider 内部消费,不发给业务 handler)
   | { type: 'debug'; kind: 'error' | 'rejection'; message: string };
@@ -59,13 +68,60 @@ export type ExtensionMessage =
   // 原生会话切换:扩展 → webview(boot 桥监听并写 dsh.sessions.current + reload)
   | { type: 'dsh:switch-session'; sessionId: string }
   // 首开/文件夹切换 bootstrap(Phase 9):与 switch-session 同路径,但语义为"新建会话接管"
-  | { type: 'dsh:bootstrap-session'; sessionId: string };
+  | { type: 'dsh:bootstrap-session'; sessionId: string }
+  // Phase 10 附着状态推送(开关/可用性/活动编辑器/选区/附着文件)
+  | { type: 'dsh:attachments:state'; state: AttachmentState }
+  // Phase 10 附着错误(拖入/读取失败;webview 展示 toast)
+  | { type: 'dsh:attachments:error'; code: 'invalid-uri' | 'directory' | 'unreadable' | 'too-large' | 'unsupported'; message: string; attachmentId?: string };
 
 /** 改动条目(方案 a 快照 diff,供审批面板) */
 export interface ChangeItem {
   path: string;
   diff: string;
   at: number;
+}
+
+// ---- Phase 10 附着类型 ----
+
+/** 附着开关种类:活动文件 / 活动选区 */
+export type AttachmentToggleKind = 'activeFile' | 'selection';
+
+/** 附着文件引用(webview 只持有 URI;内容由扩展侧发送时读取) */
+export interface AttachmentRef {
+  id: string;
+  uri: string;
+  name: string;
+  size?: number;
+  languageId?: string;
+  /** 展示路径(工作区内相对路径,工作区外绝对路径) */
+  displayPath: string;
+  /** 工作区外文件(模型可见性提示) */
+  outsideWorkspace: boolean;
+}
+
+/** 活动编辑器选区摘要(1-based,不含文本;文本仅发送瞬间快照) */
+export interface SelectionSummary {
+  startLine: number;
+  startCol: number;
+  endLine: number;
+  endCol: number;
+  charCount: number;
+}
+
+/** 附着状态(扩展 → webview 推送) */
+export interface AttachmentState {
+  activeFileEnabled: boolean;
+  selectionEnabled: boolean;
+  activeFileAvailable: boolean;
+  selectionAvailable: boolean;
+  activeFile?: {
+    path: string;
+    languageId: string;
+    isDirty: boolean;
+    isUntitled: boolean;
+  };
+  selections: readonly SelectionSummary[];
+  attachments: readonly AttachmentRef[];
 }
 
 /** 白名单结构校验:返回归一化后的请求;非法输入抛错 */
@@ -154,6 +210,42 @@ export function validateWebviewRequest(raw: unknown): WebviewRequest {
         throw new Error('bridge: subagent:interrupt.childSessionId must be a session id');
       }
       return { type: 'subagent:interrupt', parentSessionId: msg.parentSessionId, childSessionId: msg.childSessionId };
+    // ---- Phase 10 附着 ----
+    case 'dsh:attachments:ready':
+      return { type: 'dsh:attachments:ready' };
+    case 'dsh:attachments:add': {
+      const atts = msg.attachments;
+      if (!Array.isArray(atts) || atts.length === 0 || atts.length > 16) {
+        throw new Error('bridge: dsh:attachments:add.attachments must be 1..16 items');
+      }
+      const attachments: { uri: string }[] = [];
+      for (const item of atts) {
+        if (typeof item !== 'object' || item === null) {
+          throw new Error('bridge: dsh:attachments:add item must be an object');
+        }
+        const uri = (item as Record<string, unknown>).uri;
+        if (typeof uri !== 'string' || uri.length === 0 || uri.length > 8_192) {
+          throw new Error('bridge: dsh:attachments:add.uri must be a string <= 8k chars');
+        }
+        attachments.push({ uri });
+      }
+      return { type: 'dsh:attachments:add', attachments };
+    }
+    case 'dsh:attachments:remove':
+      if (typeof msg.attachmentId !== 'string' || msg.attachmentId.length === 0 || msg.attachmentId.length > 128) {
+        throw new Error('bridge: dsh:attachments:remove.attachmentId invalid');
+      }
+      return { type: 'dsh:attachments:remove', attachmentId: msg.attachmentId };
+    case 'dsh:attachments:toggle': {
+      const kind = msg.kind;
+      if (kind !== 'activeFile' && kind !== 'selection') {
+        throw new Error('bridge: dsh:attachments:toggle.kind must be activeFile|selection');
+      }
+      if (typeof msg.enabled !== 'boolean') {
+        throw new Error('bridge: dsh:attachments:toggle.enabled must be a boolean');
+      }
+      return { type: 'dsh:attachments:toggle', kind, enabled: msg.enabled };
+    }
     default:
       throw new Error(`bridge: unknown message type: ${String(msg.type)}`);
   }

@@ -21,3 +21,50 @@ describe('bridge 入参白名单校验', () => {
     expect(() => validateWebviewRequest({ type: 'session:open', sessionId: '../etc' })).toThrow();
   });
 });
+
+describe('Phase 10 附着消息白名单校验', () => {
+  it('合法:ready / add / remove / toggle', () => {
+    expect(validateWebviewRequest({ type: 'dsh:attachments:ready' })).toEqual({ type: 'dsh:attachments:ready' });
+    expect(
+      validateWebviewRequest({ type: 'dsh:attachments:add', attachments: [{ uri: 'file:///a.ts' }, { uri: 'file:///b.ts' }] }),
+    ).toEqual({ type: 'dsh:attachments:add', attachments: [{ uri: 'file:///a.ts' }, { uri: 'file:///b.ts' }] });
+    expect(validateWebviewRequest({ type: 'dsh:attachments:remove', attachmentId: 'abc-123' })).toEqual({
+      type: 'dsh:attachments:remove',
+      attachmentId: 'abc-123',
+    });
+    expect(validateWebviewRequest({ type: 'dsh:attachments:toggle', kind: 'activeFile', enabled: true })).toEqual({
+      type: 'dsh:attachments:toggle',
+      kind: 'activeFile',
+      enabled: true,
+    });
+    expect(validateWebviewRequest({ type: 'dsh:attachments:toggle', kind: 'selection', enabled: false })).toEqual({
+      type: 'dsh:attachments:toggle',
+      kind: 'selection',
+      enabled: false,
+    });
+  });
+
+  it('非法载荷显式抛错', () => {
+    // add
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:add', attachments: [] })).toThrow();
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:add', attachments: 'x' })).toThrow();
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:add' })).toThrow();
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:add', attachments: [{ uri: '' }] })).toThrow();
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:add', attachments: [{ uri: 42 }] })).toThrow();
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:add', attachments: [{ noUri: 'x' }] })).toThrow();
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:add', attachments: [{ uri: 'x'.repeat(9000) }] })).toThrow();
+    expect(() =>
+      validateWebviewRequest({
+        type: 'dsh:attachments:add',
+        attachments: Array.from({ length: 17 }, () => ({ uri: 'file:///a.ts' })),
+      }),
+    ).toThrow();
+    // remove
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:remove', attachmentId: '' })).toThrow();
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:remove', attachmentId: 7 })).toThrow();
+    // toggle
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:toggle', kind: 'other', enabled: true })).toThrow();
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:toggle', kind: 'activeFile', enabled: 'yes' })).toThrow();
+    expect(() => validateWebviewRequest({ type: 'dsh:attachments:toggle' })).toThrow();
+  });
+});

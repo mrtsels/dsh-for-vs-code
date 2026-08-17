@@ -4,6 +4,8 @@
  *   2. web/changes-main.tsx → dist/web/changes.js (改动审查面板 webview)
  *   3. web/session-view-main.tsx → dist/web/session-view.js (会话管理页 webview,
  *      由 build-web-shell.mjs 拷入 dsh-shell 并注入 index.html)
+ *   4. web/dsh-attachment-ui.ts → dist/web/dsh-attachment-ui.js (附着 UI,Phase 10,
+ *      由 build-web-shell.mjs 拷入 dsh-shell 并注入 index.html)
  * 主 UI = dist/web/dsh-shell(上游源码构建产物,由 build-web-shell.mjs 装配)。
  * --watch 开发模式。
  */
@@ -37,6 +39,19 @@ const sessionView = {
   format: 'iife',
   target: 'es2022',
   jsx: 'automatic',
+  sourcemap: true,
+  define: { 'process.env.NODE_ENV': '"production"' },
+  logLevel: 'info',
+};
+
+/** @type {import('esbuild').BuildOptions} */
+const attachmentUi = {
+  entryPoints: [resolve(app, 'web/dsh-attachment-ui.ts')],
+  outfile: resolve(app, 'dist/web/dsh-attachment-ui.js'),
+  bundle: true,
+  platform: 'browser',
+  format: 'iife',
+  target: 'es2022',
   sourcemap: true,
   define: { 'process.env.NODE_ENV': '"production"' },
   logLevel: 'info',
@@ -77,14 +92,14 @@ async function main() {
   mkdirSync(resolve(app, 'dist/web'), { recursive: true });
   writeFileSync(resolve(app, 'dist/web/changes.html'), changesSkeleton);
   if (watch) {
-    for (const options of [extension, changes, sessionView]) {
+    for (const options of [extension, changes, sessionView, attachmentUi]) {
       const ctx = await buildContext(options);
       await ctx.watch();
     }
     console.log('[watch] watching… (Ctrl+C 退出)');
   } else {
-    await Promise.all([build(extension), build(changes), build(sessionView)]);
-    console.log('dist/extension.js + dist/web/changes.js + dist/web/session-view.js 构建完成');
+    await Promise.all([build(extension), build(changes), build(sessionView), build(attachmentUi)]);
+    console.log('dist/extension.js + dist/web/changes.js + dist/web/session-view.js + dist/web/dsh-attachment-ui.js 构建完成');
   }
 }
 

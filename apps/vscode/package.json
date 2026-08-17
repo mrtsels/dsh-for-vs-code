@@ -68,6 +68,14 @@
       {
         "command": "deepseekHarness.fixDiagnosticFromMenu",
         "title": "dsh: Ask to fix 诊断"
+      },
+      {
+        "command": "deepseekHarness.toggleAttachActiveFile",
+        "title": "DeepSeek Harness: 切换附着活动文件"
+      },
+      {
+        "command": "deepseekHarness.toggleAttachSelection",
+        "title": "DeepSeek Harness: 切换附着选中内容"
       }
     ],
     "menus": {
@@ -140,6 +148,16 @@
             "忙碌时回车转向(打断当前输入,steer)"
           ],
           "description": "agent 忙碌时按 Enter 的行为。写回 dsh 实例 ui-conversation.busyEnter"
+        },
+        "deepseekHarness.context.attachActiveFile": {
+          "type": "boolean",
+          "default": false,
+          "description": "发送消息时附着当前打开的文件内容(含未保存改动)。对话输入区上方的开关 chip 可随时切换"
+        },
+        "deepseekHarness.context.attachSelection": {
+          "type": "boolean",
+          "default": false,
+          "description": "发送消息时附着当前打开文件中已选中的内容(含行列)。对话输入区上方的开关 chip 可随时切换"
         }
       }
     },

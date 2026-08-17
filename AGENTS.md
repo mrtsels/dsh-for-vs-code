@@ -113,6 +113,19 @@ DeepSeek Harness(`dsh`)的 VS Code 客户端:复用上游 Agent Runtime / Cordis
   只因 harness 帧真的接收。自建 React 视图回传宿主必须走 `window.__dshBridge.postToHost`
   (bridge.js 在 head 持有唯一 acquire),不得自行二次 acquire
 
+- **注入脚本的 MutationObserver 必须防自激循环**(2026-08-21 实测):观察 body 子树的
+  MutationObserver 若在回调里**无条件重渲染**(即使 DOM 未变),渲染写入会再次触发 observer
+  → rAF 级无限循环,主线程被打满(真实 webview 卡死,Playwright 动作超时挂起)。
+  守卫:回调里只在「注入根丢失」(root 未 connected)时才重建+重渲染;根存在则直接跳过。
+  附着 UI(web/dsh-attachment-ui.ts)即此范式;title 行注入只做幂等查询不写 DOM,不受影响。
+- **Phase 10 附着协议**(2026-08-21):Explorer→webview 拖放的标准 MIME 是 `text/uri-list`
+  (每行一个 URI,非 JSON;`vscode.Resource` 不是公开合约);OS 桌面拖入是 `Files`,webview 内
+  取路径只能 feature-detect `globalThis.webUtils.getPathForFile`(Electron 能力,非 VS Code
+  API 合约,拿不到就降级提示);webview 只传 URI,内容一律扩展侧 `workspace.fs` 发送时读取
+  (1 MiB 上限/二进制 NUL 检测/20k 截断/总量 100k/目录拒绝)。上游输入框冻结 → 附着 UI 走
+  bridge 注入(dsh-attachment-ui.js,装配时拷入 dsh-shell 并注入 </body> 前),chip 文案
+  textContent 渲染(文件名转义)
+
 ## 执行
 
 阶段计划与进度(Route A Phase 5–8:vendor 构建打通 → 定制适配 → 功能验证与清理 → 交付门)、每阶段 checklist、G0/G1/G2 Review 流程与记录模板、风险登记表、验收 Checkbox → **全部在 [TASK.md](TASK.md)**,按阶段推进,每完成一步在 TASK.md 打勾。
