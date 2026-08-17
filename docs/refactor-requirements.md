@@ -166,6 +166,20 @@
 
 **G0:typecheck 0 / lint 0 / 54 tests / build 3 入口全绿。**
 
+## 六、Origin 栅栏与代理方案(2026-08-17,工作区不显示的最终根因)
+
+**现象**:webview 里工作区不显示、无法选择、会话不加载(此前误判为裁剪/连接配置问题)。
+
+**真根因**:3080 的 `/api` 信任栅栏(`api-request-trust.ts`)要求浏览器请求的 **Origin 恰好等于 3080 同源**(防 DNS rebinding/跨站),否则 403。webview 页面源是 `vscode-webview://<ext-id>`,直连 3080 的 HTTP 与 WS 全部 403(实测);`--trusted-host` 只放行 Host 栅栏,Origin 栅栏无解(实测 vscode-webview:// 仍 403)。
+
+**为什么早期自研 UI 能工作**:网络走扩展侧 Node fetch(无浏览器 Origin 头),天然绕过栅栏;搬 dsh 原生 UI 后 webview 直连就撞墙。
+
+**方案(用户确认)**:扩展进程内 HTTP+WS 转发代理(`src/vscode/proxy.ts`,127.0.0.1 随机端口),转发 3080 时改写 `origin/host/sec-fetch-site` 为目标同源 + 响应加 CORS 头;webview runtime 经 `__DSH_WEB_URL__` 注入连代理。纯传输层,不缓存状态。
+
+**验证**:@live 测试(HTTP host.describe ok + WS 101 握手)+ Chrome 端到端(workspace 列表含 dsh-for-vs-code/resumes,选择菜单正常)。
+
+**连带修复**:fetch 脚本 connection 适配写入路径缺 `@deepseek-ai` 段(误写 `plugins/<id>/`,加载路径下一直是未适配版);boot 裁剪需同步过滤 inject 依赖(ui-workspace→ui-sidebar 等缺失导致 "Failed to load plugins");恢复 ui-sidebar + ui-cordis(loader 图枢纽,38→28)。
+
 ## 四、打勾项细节一致性核查(2026-08-17 实测)
 
 对需求表中标 ✅/🔶 的项,逐一核查**实现细节与声称的一致性**(读代码 + 实测,非仅看"做了没有")。

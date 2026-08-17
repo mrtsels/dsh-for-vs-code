@@ -23,6 +23,8 @@ export interface ChatPanelHost {
 interface ChatPanelOptions {
   extensionUri: vscode.Uri;
   getBaseUrl: () => string;
+  /** webview 直连 3080 会被 Origin 栅栏 403;扩展侧代理地址由 extension.ts 注入 */
+  getProxyBase: () => string;
 }
 
 export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
@@ -30,6 +32,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
 
   private readonly extensionUri: vscode.Uri;
   private readonly getBaseUrl: () => string;
+  private readonly getProxyBase: () => string;
   private panel: vscode.WebviewPanel | undefined;
   private view: vscode.WebviewView | undefined;
   /** 可变 handler(extension.ts 接线,解决构造顺序) */
@@ -38,6 +41,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
   constructor(options: ChatPanelOptions) {
     this.extensionUri = options.extensionUri;
     this.getBaseUrl = options.getBaseUrl;
+    this.getProxyBase = options.getProxyBase;
   }
 
   /** WebviewViewProvider:活动栏点击 → 侧边栏直显原生 UI */
@@ -121,6 +125,9 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     const nonce = crypto.randomUUID().replace(/-/g, '');
     const csp = webview.cspSource;
     const toWebview = (uri: vscode.Uri): string => webview.asWebviewUri(uri).toString();
+    // 代理地址:webview 的 runtime 连它(Origin 栅栏绕行);connect-src 需放行 http+ws
+    const proxyBase = this.getProxyBase();
+    const proxyWs = proxyBase.replace(/^http/, 'ws');
     // base href 必须指向产物根目录(joinPath 带 '.' 会生成畸形 base → 相对 URL 全 404)
     const baseHref = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-plugins'),
@@ -137,13 +144,14 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     <!-- unsafe-eval:上游 vite 产物(client shell)含 eval/new Function,浏览器版 3080
          无 CSP 故无此问题;webview CSP 必须放行。产物为本地受信文件 + connect 仅
          127.0.0.1:3080,风险受控。 -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${csp} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval' ${csp}; img-src ${csp} data: blob:; font-src ${csp} data:; connect-src http://127.0.0.1:3080 ws://127.0.0.1:3080; worker-src ${csp} blob:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${csp} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval' ${csp}; img-src ${csp} data: blob:; font-src ${csp} data:; connect-src http://127.0.0.1:3080 ws://127.0.0.1:3080 ${proxyBase} ${proxyWs}; worker-src ${csp} blob:;" />
     <base href="${baseHref}" />
     <link rel="stylesheet" href="${toWebview(asUri('assets/vendor-CjyC-hUb.css'))}" />
     <link rel="stylesheet" href="${toWebview(asUri('assets/index-CSGf6Qzd.css'))}" />
   </head>
   <body style="margin:0;padding:0;height:100vh;overflow:hidden;background:transparent">
     <div id="root" style="height:100vh"></div>
+    <script nonce="${nonce}">window.__DSH_WEB_URL__ = '${proxyBase}';</script>
     <script nonce="${nonce}">${bootJs}</script>
     <script type="module" nonce="${nonce}" src="${toWebview(asUri('assets/index-Dqw48FrP.js'))}"></script>
   </body>

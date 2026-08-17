@@ -90,10 +90,14 @@ for (const url of [...new Set(boot.entries.map((e) => e.url))]) {
     // 否则插件 bundle 404,boot 永远等不到激活 → 白屏
     let body = await fetchTo(url, `plugins/@deepseek-ai/${id}/client.js`);
     if (id === 'dsh-client-connection') {
+      // resolveBase 优先读扩展注入的 __DSH_WEB_URL__(扩展侧代理地址,绕行 Origin 栅栏);
+      // 无注入时回退 3080(浏览器版同源场景)
       body = body
-        .replace(/location\?\.origin !== void 0 && location\.origin !== "null" \? location\.origin : INTERNAL_BASE/g, '"http://127.0.0.1:3080"')
-        .replace(/loc\?\.origin !== void 0 && loc\.origin !== "null" \? loc\.origin : INTERNAL_BASE\$1/g, '"http://127.0.0.1:3080"');
-      await writeFile(join(dest, 'plugins', id, 'client.js'), body);
+        .replace(/location\?\.origin !== void 0 && location\.origin !== "null" \? location\.origin : INTERNAL_BASE/g, 'globalThis.__DSH_WEB_URL__ ?? "http://127.0.0.1:3080"')
+        .replace(/loc\?\.origin !== void 0 && loc\.origin !== "null" \? loc\.origin : INTERNAL_BASE\$1/g, 'globalThis.__DSH_WEB_URL__ ?? "http://127.0.0.1:3080"');
+      // 覆盖 fetchTo 已写文件(同一路径,含 @deepseek-ai 段;此前误写 plugins/<id>/ 导致
+      // 加载路径下一直是未适配版 → runtime 用 location.origin(vscode-webview://)→ 连不上 → 工作区空)
+      await writeFile(join(dest, 'plugins', '@deepseek-ai', id, 'client.js'), body);
     }
   } catch (e) { console.error(`插件失败 ${url}: ${e.message}`); }
 }
@@ -115,17 +119,26 @@ const EXCLUDE_PLUGINS = new Set([
   // ui-workspace 保留:WorkspacePicker/WorkspaceBrowser 是输入框工作区选择
   // 与会话工作区显示的依赖(裁剪会导致"选择工作区"无效、切换后工作区不加载);
   // "自动关联 VS Code 工作区"由扩展层 ensureWorkspace + newSession 实现
-  // 会话列表栏:移出 webview,由 VS Code 原生 tree view 接管(用户确认的架构)
-  'dsh-client-ui-sidebar',
-  // 依赖 ui-sidebar 且非核心(cordis 管理界面)
-  'dsh-client-ui-cordis',
+  // ui-sidebar 保留:WorkspacePicker/WorkspaceBrowser 的挂载点与 ui-workspace 加载链
+  // 依赖(裁剪后 loader 图断裂 → "Failed to load plugins");会话列表由原生树接管,
+  // sidebar 仅作为 workspace 选择器的宿主
+  // 'dsh-client-ui-sidebar',
+  // ui-cordis 恢复:loader 图枢纽(cordis 管理界面本体可不用,但保留 entry 维持加载链)
+  // 'dsh-client-ui-cordis',
 ]);
 const trimmed = boot.entries.filter((e) => !EXCLUDE_PLUGINS.has(e.id.replace('@deepseek-ai/', '')));
-console.log(`boot 裁剪: ${boot.entries.length} → ${trimmed.length} 个插件`);
+// 裁剪注入依赖:不在保留集的依赖从 inject 移除(如 ui-workspace→ui-sidebar、
+// ui-jobs→ui-primitives),否则模块加载器等待缺失模块,插件永不激活 → 工作区 UI 缺失
+const keptIds = new Set(trimmed.map((e) => e.id));
+const trimmedClean = trimmed.map((e) => ({
+  ...e,
+  inject: (e.inject ?? []).filter((d) => keptIds.has(d)),
+}));
+console.log(`boot 裁剪: ${boot.entries.length} → ${trimmedClean.length} 个插件`);
 const localBoot = {
   ...boot,
   rev: 'local',
-  entries: trimmed.map((e) => ({ ...e, url: `./plugins/@deepseek-ai/${e.id.replace('@deepseek-ai/', '')}/client.js`, rev: 'local' })),
+  entries: trimmedClean.map((e) => ({ ...e, url: `./plugins/@deepseek-ai/${e.id.replace('@deepseek-ai/', '')}/client.js`, rev: 'local' })),
 };
 const debugBridge = `
 ;(() => {

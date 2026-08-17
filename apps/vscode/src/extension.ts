@@ -14,6 +14,7 @@ import { SessionsTreeProvider } from './sessions/tree.js';
 import { postRpc, ensureWorkspace } from './rpc.js';
 import { SnapshotWatcher } from './vscode/workspace.js';
 import { WorkspaceChangeDecorationProvider } from './vscode/workspace-decoration.js';
+import { HttpProxy } from './vscode/proxy.js';
 import { runCommandInTerminal } from './vscode/terminal.js';
 import { collectEditorContext } from './vscode/editor.js';
 import { collectDiagnostics, countWorkspaceDiagnostics } from './vscode/diagnostics.js';
@@ -63,12 +64,22 @@ export function activate(context: vscode.ExtensionContext): void {
   changeDecorations = new WorkspaceChangeDecorationProvider(() => watcher.listChanges());
   refreshDecorations = (): void => changeDecorations.refreshActive();
   disposables.add(changeDecorations);
+  // Origin 栅栏代理:webview 直连 3080 会 403(信任栅栏要求同源),扩展进程内
+  // 起 HTTP+WS 转发代理(127.0.0.1 随机端口),webview 的 runtime 连代理。
+  const proxy = new HttpProxy(
+    vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+  );
+  void proxy.start().catch((error: unknown) => {
+    logger.warn(`代理启动失败:${error instanceof Error ? error.message : String(error)}`);
+  });
+  disposables.add({ dispose: () => void proxy.stop() });
   // 主 UI = 编辑器 WebviewPanel(宽面板容纳 dsh 完整布局,范式对齐社区实践);
   // 活动栏 view 提供"打开"入口节点
   const chatPanelHost = new ChatPanel({
     extensionUri: context.extensionUri,
     getBaseUrl: () =>
       vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+    getProxyBase: () => proxy.baseUrl,
   });
   // 设置同步:VS Code locale/theme(默认 follow-web)↔ dsh 实例设置
   for (const d of registerSettingsSync(() =>
