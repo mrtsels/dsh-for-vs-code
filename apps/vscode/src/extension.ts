@@ -262,6 +262,23 @@ export function activate(context: vscode.ExtensionContext): void {
         await refreshSessionList();
         break;
       }
+      // webview 内"新会话"按钮被 bridge 拦截 → 用 VS Code 当前目录创建/复用会话,
+      // 与命令 deepseekHarness.newSession 同路径(确保 workspace 链接到 VS Code 目录)
+      case 'dsh:new-session': {
+        const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
+        try {
+          const sessionId = wsPath
+            ? await ensureFolderSession(current, wsPath)
+            : await createSessionAtDefaultCwd(current);
+          if (sessionId === undefined) throw new Error('实例未就绪或路径无效');
+          await context.globalState.update('dsh.initialSessionId', sessionId);
+          chatPanel.post({ type: 'dsh:bootstrap-session', sessionId });
+        } catch (error) {
+          chatPanel.post({ type: 'error', message: `新建会话失败:${error instanceof Error ? error.message : String(error)}` });
+        }
+        break;
+      }
       case 'session:fork': {
         const childId = await sessions.fork(request.sessionId);
         state.value = childId;

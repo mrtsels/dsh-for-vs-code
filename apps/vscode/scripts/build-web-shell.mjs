@@ -434,10 +434,22 @@ const BRIDGE_JS = `(() => {
       }
     });
   };
-  // 点击委托(document capture):workspaces 页点会话行/新建 → 返回对话;按钮 → 切换视图
+  // 点击委托(document capture):
+  // 1) 顶部"新会话"按钮/logo wordmark(上游 startSession 落在最近 workspace,不含 VS Code
+  //    目录)→ 拦截,改由扩展用 VS Code 当前目录创建/复用会话(ensureFolderSession);
+  // 2) 会话切换按钮 → 切换视图;3) workspaces 页点会话行 → 返回对话。
   document.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
+    // 新会话拦截(workspaces 页顶部按钮 + logo wordmark 快捷方式)
+    const newSession = target.closest('[class$="_newSession"], [class$="_brand"]');
+    if (newSession !== null) {
+      event.stopPropagation();
+      event.preventDefault();
+      try { localStorage.setItem(VIEW_KEY, 'chat'); } catch (err) {}
+      window.parent.postMessage({ type: 'dsh:new-session' }, '*');
+      return;
+    }
     if (target.closest('.dsh-back-button') !== null) {
       event.stopPropagation();
       setView(document.body.classList.contains('dsh-workspaces') ? 'chat' : 'workspaces');
@@ -445,8 +457,7 @@ const BRIDGE_JS = `(() => {
     }
     if (!document.body.classList.contains('dsh-workspaces')) return;
     const sessionRow = target.closest('[class$="_sessionRow"]');
-    const newSession = target.closest('[class$="_newSession"]');
-    if (sessionRow !== null || newSession !== null) {
+    if (sessionRow !== null) {
       // 延迟略长:给上游打开会话(open/connect)留时间,退出后对话页即显示目标会话
       window.setTimeout(() => { setView('chat'); }, 400);
     }
