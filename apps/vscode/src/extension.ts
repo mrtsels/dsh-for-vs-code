@@ -165,27 +165,25 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
-  // ---- 状态栏 + cwd 一致性检测(P1-15) ----
+  // ---- 状态栏(会话绑定 workspace 模型,实例 cwd 仅作信息展示,不告警) ----
+  // 说明:每个会话绑定自己的 workspace(agent 的 shell/fs 在会话 workspace 目录工作),
+  // 实例全局 cwd 是宿主启动目录 —— 与 VS Code 工作区不一致是常态而非风险,故不弹警告。
   const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   statusItem.show();
-  let cwdWarned = false;
   let failureNotified = false;
 
   function updateStatusItem(state: RuntimeState, error?: string): void {
     if (state === 'connected') {
       failureNotified = false; // 连接恢复后允许再次通知失败
       const cwd = runtime.description?.cwd;
-      const mismatch = workspaceRoot !== '' && cwd !== undefined && cwd !== workspaceRoot;
-      statusItem.text = mismatch ? '$(warning) dsh: cwd ≠ 工作区' : '$(broadcast) dsh: 已连接';
-      statusItem.tooltip = mismatch
-        ? `实例 cwd = ${cwd}\n工作区 = ${workspaceRoot}\n(agent 操作的是实例 cwd)\n点击重连`
-        : `dsh ${runtime.description?.version ?? ''}\nprovider=${runtime.description?.provider ?? ''}\n模型=${runtime.description?.model ?? ''}\ncwd=${cwd}\n点击重连`;
-      if (mismatch && !cwdWarned) {
-        cwdWarned = true;
-        void vscode.window.showWarningMessage(
-          `DeepSeek Harness:实例 cwd(${cwd})与当前工作区(${workspaceRoot})不一致,agent 读写的是实例 cwd 目录`,
-        );
-      }
+      statusItem.text = '$(broadcast) dsh: 已连接';
+      statusItem.tooltip = [
+        `dsh ${runtime.description?.version ?? ''}`,
+        `provider=${runtime.description?.provider ?? ''}`,
+        `模型=${runtime.description?.model ?? ''}`,
+        `实例 cwd=${cwd}(会话各自绑定 workspace,agent 在会话 workspace 目录工作)`,
+        '点击查看诊断(rev/语言)',
+      ].join('\n');
     } else if (state === 'reconnecting' || state === 'connecting') {
       statusItem.text = '$(sync~spin) dsh: 连接中…';
       statusItem.tooltip = error ?? '';
@@ -525,7 +523,6 @@ export function activate(context: vscode.ExtensionContext): void {
       if (wsPath) {
         void bootstrapFolder(wsPath, { forceMessage: true });
       }
-      cwdWarned = false;
       updateStatusItem(runtime.currentState, runtime.lastError);
     }),
   );
@@ -734,7 +731,6 @@ export function activate(context: vscode.ExtensionContext): void {
       if (next === undefined || next === current) return;
       await vscode.workspace.getConfiguration('deepseekHarness').update('baseUrl', next.trim(), true);
       // rebase 由 onDidChangeConfiguration 统一处理(单一路径,防重复重连)
-      cwdWarned = false;
       void vscode.window.showInformationMessage(`DeepSeek Harness:正在连接 ${next.trim()}…`);
     }),
   );
@@ -774,7 +770,6 @@ export function activate(context: vscode.ExtensionContext): void {
         if (next !== '' && next !== runtime.currentBaseUrl) {
           runtime.rebase(next);
           proxy.setTarget(next); // 代理端口不变,重定向转发目标(webview 无需重载)
-          cwdWarned = false;
         }
       }
     }),
