@@ -127,7 +127,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
       'utf8',
     ).replace(/<\/script>/gi, '<\\/script>');
     return `<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" style="background:transparent">
   <head>
     <meta charset="utf-8" />
     <!-- unsafe-eval:上游 vite 产物(client shell)含 eval/new Function,浏览器版 3080
@@ -138,7 +138,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     <link rel="stylesheet" href="${toWebview(asUri('assets/vendor-CjyC-hUb.css'))}" />
     <link rel="stylesheet" href="${toWebview(asUri('assets/index-CSGf6Qzd.css'))}" />
   </head>
-  <body style="margin:0;padding:0;height:100vh;overflow:hidden;background:var(--vscode-sideBar-background)">
+  <body style="margin:0;padding:0;height:100vh;overflow:hidden;background:transparent">
     <div id="root" style="height:100vh"></div>
     <script nonce="${nonce}">${bootJs}</script>
     <script type="module" nonce="${nonce}" src="${toWebview(asUri('assets/index-Dqw48FrP.js'))}"></script>

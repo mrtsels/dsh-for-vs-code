@@ -11,7 +11,7 @@ import { ChangesPanel, toChangeItems } from './webview/changes-panel.js';
 import { ChatPanel } from './webview/chat-panel.js';
 import { registerSettingsSync } from './settings-sync.js';
 import { SessionsTreeProvider } from './sessions/tree.js';
-import { postRpc } from './rpc.js';
+import { postRpc, ensureWorkspace } from './rpc.js';
 import { SnapshotWatcher } from './vscode/workspace.js';
 import { runCommandInTerminal } from './vscode/terminal.js';
 import { collectEditorContext } from './vscode/editor.js';
@@ -432,14 +432,21 @@ export function activate(context: vscode.ExtensionContext): void {
       });
     }),
   );
-  // 新建会话:用 VS Code 当前工作区目录创建(session.create 支持 cwd),
+  // 新建会话:用 VS Code 当前工作区创建(session.create 支持 workspaceId/cwd),
   // 实现"工作区自动关联";无工作区时回退实例默认 cwd
   disposables.add(
     vscode.commands.registerCommand('deepseekHarness.newSession', async () => {
-      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
       try {
-        const body = await postRpc(current, 'session.create', { ...(cwd ? { cwd } : {}) });
+        // 优先用 workspaceId(确保 dsh workspace 与 VS Code 工作区关联),失败回退 cwd
+        const workspaceId = wsPath ? await ensureWorkspace(current, wsPath) : undefined;
+        const payload = workspaceId
+          ? { workspaceId }
+          : wsPath
+            ? { cwd: wsPath }
+            : {};
+        const body = await postRpc(current, 'session.create', payload);
         const sessionId = (body?.result?.value as { sessionId?: string } | undefined)?.sessionId;
         if (typeof sessionId !== 'string') throw new Error('session.create: 缺少 sessionId');
         chatPanel.post({ type: 'dsh:switch-session', sessionId });
@@ -452,6 +459,15 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
   void sessionsTree.refresh().catch(() => undefined);
+  // 工作区自动关联(连接后):确保 dsh 实例有 VS Code 工作区对应的 workspace;
+  // 失败静默(实例未就绪时由后续 newSession 重试)
+  const wsPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (wsPath) {
+    void ensureWorkspace(
+      vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
+      wsPath,
+    ).catch(() => undefined);
+  }
 
   // P3-10:连接切换命令(写入配置 + runtime.rebase)
   disposables.add(

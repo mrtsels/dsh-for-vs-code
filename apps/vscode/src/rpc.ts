@@ -66,3 +66,20 @@ export async function listSessions(baseUrl: string): Promise<SessionItem[]> {
   if (!Array.isArray(items)) throw new Error('session.list: 响应缺少 items');
   return items;
 }
+
+/**
+ * 工作区自动关联:确保 dsh 实例存在 VS Code 工作区路径对应的 workspace。
+ * 已存在 → 返回其 workspaceId;缺失 → workspace.create({path})(路径必须真实存在)。
+ * 失败返回 undefined(实例不可达/路径无效),调用方按"无 workspace"回退。
+ */
+export async function ensureWorkspace(baseUrl: string, path: string): Promise<string | undefined> {
+  const list = await postRpc(baseUrl, 'workspace.list', {});
+  const items = (list?.result?.value as { items?: Array<{ workspaceId: string; path: string }> } | undefined)
+    ?.items;
+  if (Array.isArray(items)) {
+    const hit = items.find((w) => w.path === path);
+    if (hit) return hit.workspaceId;
+  }
+  const created = await postRpc(baseUrl, 'workspace.create', { path });
+  return (created?.result?.value as { workspaceId?: string } | undefined)?.workspaceId;
+}

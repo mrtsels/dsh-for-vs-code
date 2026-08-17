@@ -149,6 +149,15 @@ const debugBridge = `
       vs.postMessage({ type: 'switch-session:applied', sessionId: d.sessionId });
     } catch (err) { send('error', 'switch-session: ' + String(err)); }
   });
+  // 背景融合 VS Code 原生底色:上游 ui-theme 可能延迟覆盖 body/html 背景,
+  // 这里在 DOMContentLoaded 后与 1s 后各强制一次 transparent
+  const enforceTransparentBg = () => {
+    document.documentElement.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enforceTransparentBg);
+  else enforceTransparentBg();
+  setTimeout(enforceTransparentBg, 1000);
 })();`;
 await writeFile(join(dest, 'boot.js'), `window.__DSH_BOOT__ = ${JSON.stringify(localBoot)};\n${debugBridge}\n`);
 const assetCount = [...fetched.keys()].filter((u) => u.startsWith('/assets/')).length;
