@@ -88,11 +88,14 @@ function cfg<T>(key: string, fallback: T): T {
  * @param baseUrl - 实例地址读取器。
  * @param isRunning - 当前是否有 agent 回合在跑(权限切换保护)。
  * @param isVisible - chat webview 是否可见(轮询节流)。
+ * @param onLocaleApplied - 语言写回实例成功后回调(上游 locale 仅在 boot 时应用,
+ *   运行中切换需重载 webview 才能生效 —— 与 switch-session 同模式)。
  */
 export function registerSettingsBridge(
   baseUrl: () => string,
   isRunning: () => boolean,
   isVisible: () => boolean,
+  onLocaleApplied: () => void = () => undefined,
 ): vscode.Disposable[] {
   // 反向回写抑制:轮询写 VS Code 设置时置位,change 处理器不再推实例(值已一致)
   let applyingExternal = false;
@@ -108,7 +111,12 @@ export function registerSettingsBridge(
     const v = cfg<LocaleSetting>('locale', 'follow-web');
     if (v === 'follow-web') return;
     void writeSettingField(baseUrl(), LOCALE_NS, 'preference', v).then((err) => {
-      if (err !== undefined) void vscode.window.showWarningMessage(`dsh: 无法写回实例设置(locale=${v}):${err}`);
+      if (err !== undefined) {
+        void vscode.window.showWarningMessage(`dsh: 无法写回实例设置(locale=${v}):${err}`);
+        return;
+      }
+      // 语言写回成功 → 重载 webview(上游 locale 仅 boot 时应用,运行中不热切换)
+      onLocaleApplied();
     });
   };
   const pushPermission = async (): Promise<void> => {
@@ -190,6 +198,8 @@ export function registerSettingsBridge(
       if (locale !== undefined && cfg<LocaleSetting>('locale', 'follow-web') !== 'follow-web'
         && cfg<string>('locale', '') !== locale) {
         await cfgRoot.update('locale', locale, vscode.ConfigurationTarget.Global);
+        // 浏览器/上游改了语言 → VS Code 设置已同步,webview 需重载才应用新语言
+        onLocaleApplied();
       }
       if (permission !== undefined && cfg<string>('permissionMode', '') !== permission) {
         await cfgRoot.update('permissionMode', permission, vscode.ConfigurationTarget.Global);

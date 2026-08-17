@@ -86,11 +86,13 @@ export function activate(context: vscode.ExtensionContext): void {
       return id === undefined ? undefined : { sessionId: id };
     },
   });
-  // 设置桥(Phase 9):theme/locale/permission/agentPreset/busyEnter 双向同步
+  // 设置桥(Phase 9):theme/locale/permission/agentPreset/busyEnter 双向同步;
+  // 语言写回成功后重载 webview(上游 locale 仅 boot 时应用)
   for (const d of registerSettingsBridge(
     () => vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
     () => controller.currentState === 'running',
     () => chatPanelHost.isVisible(),
+    () => chatPanelHost.reload(vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl)),
   )) {
     context.subscriptions.push(d);
   }

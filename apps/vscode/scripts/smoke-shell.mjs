@@ -161,9 +161,20 @@ const wsLayout = await page.evaluate(() => {
     grid: frameStyle === null ? '(无 frame)' : frameStyle.gridTemplateColumns,
     frameWidth: frame === null ? -1 : frame.getBoundingClientRect().width,
     backWorkspaces: document.querySelector('.dsh-back-workspaces') !== null,
-    logoRowHidden: (() => {
+    logoRowVisible: (() => {
       const row = document.querySelector('[class$="_logoRow"]');
-      return row === null || getComputedStyle(row).display === 'none';
+      return row !== null && getComputedStyle(row).display !== 'none';
+    })(),
+    toggleHidden: (() => {
+      const toggle = document.querySelector('[class$="_toggle"]');
+      return toggle === null || getComputedStyle(toggle).display === 'none';
+    })(),
+    fullWidthCol: (() => {
+      // 单栏全宽:computed 会把 minmax(0,1fr) 解析为像素(≈容器宽),后两列 0
+      const parts = document.querySelector('[class$="_frame"]')
+        ? getComputedStyle(document.querySelector('[class$="_frame"]')).gridTemplateColumns.split(' ')
+        : [];
+      return parts.length === 3 && parts[0] !== '0px' && parts[1] === '0px' && parts[2] === '0px';
     })(),
     sessionRow: document.querySelector('[class$="_sessionRow"]') !== null,
     storedView: localStorage.getItem('dsh.ui.view'),
@@ -219,7 +230,9 @@ if (chatLayout.darkAttr !== true && chatLayout.colorScheme !== 'dark') {
 if (!wsLayout.workspacesClass) failures.push('返回按钮未进入 Workspaces 模式');
 if (wsLayout.frameWidth < 1024) failures.push(`Workspaces 模式 frame 宽度不足(应撑宽到 1100):${wsLayout.frameWidth}`);
 if (!wsLayout.backWorkspaces) failures.push('Workspaces 模式缺少悬浮返回按钮');
-if (!wsLayout.logoRowHidden) failures.push('Workspaces 模式侧边栏 logo 行未隐藏');
+if (!wsLayout.logoRowVisible) failures.push('Workspaces 模式 logo 行丢失(用户要求保留 logo)');
+if (!wsLayout.toggleHidden) failures.push('Workspaces 模式折叠钮未隐藏');
+if (!wsLayout.fullWidthCol) failures.push(`Workspaces 模式非单栏全宽:grid=${wsLayout.grid}`);
 if (wsLayout.storedView !== 'workspaces') failures.push('视图偏好未持久化(dsh.ui.view)');
 if (wsLayout.sessionRow && !autoBack) failures.push('点击会话行未自动返回对话模式');
 if (!autoBack && !backExit) failures.push('未能退出 Workspaces 模式(会话行自动返回与悬浮按钮均未生效)');

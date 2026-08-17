@@ -165,6 +165,8 @@ body {
   --dsh-host-menu-bg: var(--vscode-menu-background, var(--dsh-host-bg));
   --dsh-host-menu-fg: var(--vscode-menu-foreground, var(--dsh-host-fg));
   --dsh-host-focus: var(--vscode-focusBorder, var(--dsh-host-link));
+  /* VS Code 强调色(textLink/焦点边框):品牌强调文字用 */
+  --dsh-host-accent: var(--vscode-textLink-foreground, var(--vscode-focusBorder, #4daafc));
 }
 body[data-dsh-host="panel"] {
   --dsh-host-bg: var(--vscode-editor-background, #1e1e1e);
@@ -260,19 +262,16 @@ body, body[data-ds-dark-theme] {
 [class$="_sidebarCol"] { overflow: hidden; }
 [class$="_handle"] { display: none !important; }
 
-/* ---- Workspaces 模式:原侧边栏内容整页呈现。
-       窄 webview(<1100px,VS Code 侧边栏):root 撑宽到 1100(> SIDEBAR_AUTO_COLLAPSE,
-       AppFrame 判定非窄布局 → 侧边栏渲染宽版浏览器),中心列 0 宽,可视区恰为
-       280px 侧边栏(其余为宿主底色,无错位);
-       宽 webview(≥1100px,编辑器面板):root 跟随 100vw,280px 侧边栏 + 中心列正常显示,
-       等效浏览器布局,自适应窗口尺寸。 ---- */
+/* ---- Workspaces 模式:独立页面的单栏完整内容(不是 sidebar 形态)。
+       root 撑宽到 max(1100px,100vw)(> SIDEBAR_AUTO_COLLAPSE=1024 → AppFrame 判定非窄
+       布局 → 侧边栏渲染宽版工作区浏览器);grid 让侧边栏列占满整行(单栏),
+       内容自适应窗口宽度(窄侧边栏与宽面板都全宽)。
+       logo(wordmark)保留在顶部,仅隐藏折叠钮;返回按钮 fixed 左上角,logo 行让位。 ---- */
 body.dsh-workspaces { overflow: hidden !important; }
 body.dsh-workspaces #root { width: max(1100px, 100vw) !important; }
-body.dsh-workspaces [class$="_frame"] { grid-template-columns: 280px minmax(0, 1fr) 0px !important; }
-@media (max-width: 1099px) {
-  body.dsh-workspaces [class$="_frame"] { grid-template-columns: 280px 0px 0px !important; }
-}
-body.dsh-workspaces [class$="_logoRow"] { display: none !important; }
+body.dsh-workspaces [class$="_frame"] { grid-template-columns: minmax(0, 1fr) 0px 0px !important; }
+body.dsh-workspaces [class$="_logoRow"] { padding-left: 40px !important; }
+body.dsh-workspaces [class$="_toggle"] { display: none !important; }
 
 /* ---- 返回按钮:body 直接子元素的固定悬浮按钮(React 重渲染不清除,点击恒有效);
        对话模式位于左上角,title 行 padding 让位对齐;Workspaces 模式同位置返回 ---- */
@@ -295,6 +294,19 @@ body.dsh-workspaces [class$="_logoRow"] { display: none !important; }
 /* ---- hero 背景光斑:上游 SVG 硬编码 #6187D8(去掉底色后仍透蓝光);
        CSS fill 覆盖为宿主前景色(透明度保留) ---- */
 [class$="_heroGlow"] ellipse { fill: var(--dsh-host-fg) !important; }
+
+/* ---- "Deep diving..."(turn 状态行)上游硬编码品牌蓝渐变:
+       改为 VS Code 强调色渐变(保留 shimmer 动画与文字裁切) ---- */
+[class$="_turnStatus"] {
+  background: linear-gradient(
+    90deg,
+    var(--dsh-host-accent) 0%,
+    var(--dsh-host-accent) 40%,
+    color-mix(in srgb, var(--dsh-host-accent) 40%, transparent) 50%,
+    var(--dsh-host-accent) 60%,
+    var(--dsh-host-accent) 100%
+  ) !important;
+}
 `;
 
 const shortId = (id) => id.replace('@deepseek-ai/', '');
@@ -318,7 +330,8 @@ const BRIDGE_JS = `(() => {
   'use strict';
   const BOOT_SESSION_KEY = 'dsh.sessions.current';
   const VIEW_KEY = 'dsh.ui.view';
-  const CHEVRON = '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="10,2 4,8 10,14"/></svg>';
+  // 会话气泡 icon(用户要求:返回按钮不用箭头,用"会话"图标)
+  const SESSIONS_ICON = '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2 2.5A1.5 1.5 0 0 1 3.5 1h9A1.5 1.5 0 0 1 14 2.5v6A1.5 1.5 0 0 1 12.5 10H8.2l-3.6 3.2A.6.6 0 0 1 3.6 12.7V10H3.5A1.5 1.5 0 0 1 2 8.5v-6z"/></svg>';
 
   // 1. 首开会话(仅在无已存会话时写入)
   const bootSession = window.__DSH_BOOT_SESSION__;
@@ -366,7 +379,7 @@ const BRIDGE_JS = `(() => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'dsh-back-button';
-    b.innerHTML = CHEVRON;
+    b.innerHTML = SESSIONS_ICON;
     b.addEventListener('click', (e) => {
       e.stopPropagation();
       setView(document.body.classList.contains('dsh-workspaces') ? 'chat' : 'workspaces');
