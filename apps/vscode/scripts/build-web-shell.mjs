@@ -160,12 +160,14 @@ async function main() {
   cpSync(SHELL_DIST, dest, { recursive: true });
   const shellHtml = join(dest, 'index.html');
   if (!existsSync(shellHtml)) throw new Error(`shell index.html 缺失:${shellHtml}`);
-  // 绝对路径改相对;去掉 manifest/favicon(webview 内 404)
+  // 绝对路径改相对;去掉 manifest/favicon(webview 内 404,同时不随 VSIX 分发)
   let html = readFileSync(shellHtml, 'utf8')
     .replace(/(src|href)="\//g, '$1="./')
     .replace(/<link rel="manifest"[^>]*>\s*/g, '')
     .replace(/<link rel="icon"[^>]*>\s*/g, '');
   writeFileSync(shellHtml, html);
+  rmSync(join(dest, 'manifest.webmanifest'), { force: true });
+  rmSync(join(dest, 'favicon.svg'), { force: true });
 
   // 2. 扫描 client 包 → 拷贝 bundle + 组图
   const rows = scanClientPackages();
