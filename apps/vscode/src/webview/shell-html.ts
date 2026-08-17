@@ -41,6 +41,6 @@ export function assembleShellHtml(input: ShellHtmlInput): string {
   else out = `<head>${headBlock}</head>${out}`;
   // body 开标签后注入;无 body 时挂在 </html> 前
   if (/<body[^>]*>/i.test(out)) out = out.replace(/<body[^>]*>/i, (m) => `${m}${bodyBlock}`);
-  else out = out.replace(/<\/html>/i, `${bodyBlock}<\/html>`);
+  else out = out.replace(/<\/html>/i, `${bodyBlock}</html>`);
   return out;
 }
