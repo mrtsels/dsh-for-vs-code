@@ -16,8 +16,7 @@
     "vscode": "^1.95.0"
   },
   "activationEvents": [
-    "onStartupFinished",
-    "onView:deepseekHarness.chat"
+    "onStartupFinished"
   ],
   "contributes": {
     "commands": [
@@ -66,6 +65,16 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "deepseekHarness.switchSession",
+          "when": "false"
+        },
+        {
+          "command": "deepseekHarness.refreshSessions",
+          "when": "false"
+        }
+      ],
       "editor/context": [
         {
           "command": "deepseekHarness.explainSelection",

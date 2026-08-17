@@ -414,7 +414,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const sessionsTree = new SessionsTreeProvider(() =>
     vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
   );
-  disposables.add(vscode.window.createTreeView('deepseekHarness.sessions', { treeDataProvider: sessionsTree }));
+  // 仅注册 provider(不需要 TreeView API 的额外操作;文档:需要 TreeView API 才用 createTreeView)
+  disposables.add(vscode.window.registerTreeDataProvider('deepseekHarness.sessions', sessionsTree));
   disposables.add(sessionsTree.startAutoRefresh());
   disposables.add(
     vscode.commands.registerCommand('deepseekHarness.switchSession', (sessionId: unknown) => {
