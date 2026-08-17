@@ -31,6 +31,8 @@ export type WebviewRequest =
   | { type: 'dsh:new-session' }
   // 会话管理页 workspace 行点击 → 跳转到该 workspace(复用 blank/最近会话或新建)
   | { type: 'dsh:open-workspace'; title: string; newSession: boolean }
+  // webview 布局/语言自动诊断(扩展写入 .dsh-webview-diag.json 供排查)
+  | { type: 'dsh:diag'; payload: Record<string, unknown> }
   // 内部调试通道:webview 内 error/unhandledrejection 转发(不入 validateWebviewRequest 白名单,
   // 仅 ChatViewProvider 内部消费,不发给业务 handler)
   | { type: 'debug'; kind: 'error' | 'rejection'; message: string };

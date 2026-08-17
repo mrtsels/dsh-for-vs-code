@@ -582,6 +582,46 @@ const BRIDGE_JS = `(() => {
     });
   };
 
+  // 5b. 自动诊断:应用 boot 后与视图切换时采集 webview 布局/语言事实,
+  // 回传扩展写入本地文件(.dsh-webview-diag.json),便于排查环境差异。
+  const collectDiag = () => {
+    const frame = document.querySelector('[class$="_frame"]');
+    const sidebarRoot = document.querySelector('[class$="_sidebarCol"] [class*="_root "]');
+    const tabs = [...document.querySelectorAll('[class$="_tab"]')];
+    const tabText = tabs.map((t) => t.textContent ?? '').join(' ');
+    return {
+      viewport: window.innerWidth,
+      frameWidth: frame === null ? null : Math.round(frame.getBoundingClientRect().width),
+      frameGrid: frame === null ? null : getComputedStyle(frame).gridTemplateColumns,
+      sidebarRootWidth: sidebarRoot === null ? null : Math.round(sidebarRoot.getBoundingClientRect().width),
+      sidebarRootInline: sidebarRoot === null ? null : (sidebarRoot.getAttribute('style') || ''),
+      inWorkspaces: document.body.classList.contains('dsh-workspaces'),
+      navLang: navigator.language,
+      dshLocale: window.__DSH_LOCALE__ ?? null,
+      uiLocale: detectUiLocale(),
+      tabText,
+      viewKey: localStorage.getItem('dsh.ui.view'),
+      sessionRows: document.querySelectorAll('[class$="_sessionRow"]').length,
+      projectRows: document.querySelectorAll('[class$="_projectRow"]').length,
+      bootSession: (() => { try { return localStorage.getItem(BOOT_SESSION_KEY); } catch (err) { return null; } })(),
+    };
+  };
+  let lastDiag = '';
+  const reportDiag = () => {
+    try {
+      const payload = collectDiag();
+      const json = JSON.stringify(payload);
+      if (json === lastDiag) return;
+      lastDiag = json;
+      postToHost({ type: 'dsh:diag', payload });
+    } catch (err) {}
+  };
+  window.setTimeout(reportDiag, 3000); // boot 后
+  if (typeof MutationObserver !== 'undefined') {
+    const diagObserver = new MutationObserver(() => { reportDiag(); });
+    diagObserver.observe(document.body, { attributes: true, attributeFilter: ['class'], subtree: false });
+  }
+
   // 6. 会话切换桥(既有 + Phase 9 bootstrap:同一写入路径,不同消息名)
   window.addEventListener('message', (event) => {
     const msg = event.data;

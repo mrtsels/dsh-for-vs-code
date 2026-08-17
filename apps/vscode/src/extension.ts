@@ -4,7 +4,7 @@
  * Pseudoterminal 终端、改动审查面板(方案 a)。
  */
 import * as vscode from 'vscode';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { HarnessRuntime } from './agent/runtime.js';
 import { SessionManager } from './agent/session-manager.js';
 import { AgentController } from './agent/controller.js';
@@ -288,6 +288,17 @@ export function activate(context: vscode.ExtensionContext): void {
         await sessions.seedHistory(childId);
         chatPanel.post({ type: 'session:forked', sessionId: childId });
         await refreshSessionList();
+        break;
+      }
+      // webview 自动诊断 → 写工作区根 .dsh-webview-diag.json(排查环境差异)
+      case 'dsh:diag': {
+        try {
+          const diagPath = vscode.Uri.joinPath(vscode.Uri.file(workspaceRoot || '.'), '.dsh-webview-diag.json');
+          writeFileSync(diagPath.fsPath, JSON.stringify(request.payload, null, 1) + '\n');
+          logger.info(`webview 诊断已写入 ${diagPath.fsPath}`);
+        } catch (error) {
+          logger.warn(`诊断写入失败:${error instanceof Error ? error.message : String(error)}`);
+        }
         break;
       }
       // 会话管理页点 workspace 行/其 + 按钮 → 跳转到该 workspace(跳转非派生)
