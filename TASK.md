@@ -90,12 +90,12 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 
 - [x] P5-1 submodule 锁定:`vendor/deepseek-harness` @ `47f94385`(0.1.0-rc.5)→ docs/versions.md 记录
 - [x] P5-2 vendor workspace 安装:corepack pnpm 11.7.0 install --frozen-lockfile
-- [ ] P5-3 构建:vendor 内 `pnpm run build:lib:client` + `pnpm run build:web`;验证各 client 包
-      `lib/client.js` 与 `apps/web/dist` 产出
-- [ ] P5-4 装配脚本 `build-web-shell.mjs`:拷贝 + 静态组图(与 rc.6 抓取图核对)+ index.html
-      + resolveBase 断言式替换 → 产出 `dist/web/dsh-shell/`
-- [ ] P5-5 面板接线:chat-panel.ts 指向 dsh-shell;冒烟:侧边栏完整 UI(全量插件图,等同 3080)、
-      会话列表、工作区选择、聊天流式
+- [x] P5-3 构建:vendor 内 `pnpm run build:lib:client` + `pnpm run build:web`;验证各 client 包
+      `lib/client.js` 与 `apps/web/dist` 产出(**实测:rc.5 源码构建产物与 rc.6 抓取产物字节级一致**)
+- [x] P5-4 装配脚本 `build-web-shell.mjs`:拷贝 + 静态组图(与 rc.6 抓取图核对,39 插件零缺失)+
+      index.html + resolveBase 断言式替换 → 产出 `dist/web/dsh-shell/`(静态冒烟 200)
+- [ ] P5-5 面板接线:chat-panel.ts 指向 dsh-shell(**接线已完成**);冒烟:侧边栏完整 UI、会话列表、
+      工作区选择、聊天流式(**视觉冒烟待 F5/启动扩展.command 确认**)
 - [ ] P5-6 G0 四门 + 提交(脚本 + 接线 + 文档)
 
 ### Phase 6:定制适配(侧边栏形态)

@@ -1,12 +1,13 @@
 /**
- * chat-panel.ts — 主 UI:装配 dsh 原生 UI(上游 shell 本地产物)。
+ * chat-panel.ts — 主 UI:装配 dsh 原生 UI(上游 shell 源码构建产物)。
  *
  * 双模式:
  * - 活动栏侧边栏(WebviewView):点击图标直显原生 UI(主入口)
  * - 编辑器面板(WebviewPanel):deepseekHarness.open 命令(可选)
  *
- * UI = dsh 上游 React 组件(与浏览器版一致),资源全本地(dist/web/dsh-plugins),
- * CSP 无 remote origin。fetch-dsh-ui.mjs 从 3080 抓取产物(boot 图 + assets + 插件)。
+ * UI = dsh 上游 React 组件(与浏览器版一致),资源全本地(dist/web/dsh-shell,
+ * 由 build-web-shell.mjs 从 vendor 源码构建装配),CSP 无 remote origin。
+ * index.html 与 boot.js 为构建产物;此处只注入 CSP/base href/__DSH_WEB_URL__。
  */
 import * as vscode from 'vscode';
 import { readFileSync } from 'node:fs';
@@ -54,6 +55,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     webview.options = {
       enableScripts: true,
       localResourceRoots: [
+        vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-shell'),
         vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-plugins'),
         vscode.Uri.joinPath(this.extensionUri, 'dist', 'web'),
       ],
@@ -79,6 +81,7 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
         enableScripts: true,
         retainContextWhenHidden: true,
         localResourceRoots: [
+          vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-shell'),
           vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-plugins'),
           vscode.Uri.joinPath(this.extensionUri, 'dist', 'web'),
         ],
@@ -122,42 +125,34 @@ export class ChatPanel implements ChatPanelHost, vscode.WebviewViewProvider {
     });
   }
 
+  /**
+   * 装配 webview HTML:读 dsh-shell 构建产物(index.html + boot.js),
+   * 注入 CSP(base + nonce)、base href(产物根)与运行时变量(__DSH_WEB_URL__)。
+   * script-src 放行 webview 自身源(cspSource,本地产物)+ nonce 内联脚本;
+   * unsafe-eval 为上游 vite 产物所需(浏览器版 3080 无 CSP;产物本地受信,
+   * connect 仅 127.0.0.1:3080/代理,风险受控)。
+   */
   private buildHtml(webview: vscode.Webview): string {
-    const asUri = (rel: string): vscode.Uri =>
-      vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-plugins', ...rel.split('/'));
+    const shellDir = vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-shell');
     const nonce = crypto.randomUUID().replace(/-/g, '');
     const csp = webview.cspSource;
-    const toWebview = (uri: vscode.Uri): string => webview.asWebviewUri(uri).toString();
-    // 代理地址:webview 的 runtime 连它(Origin 栅栏绕行);connect-src 需放行 http+ws
     const proxyBase = this.getProxyBase();
     const proxyWs = proxyBase.replace(/^http/, 'ws');
     // base href 必须指向产物根目录(joinPath 带 '.' 会生成畸形 base → 相对 URL 全 404)
-    const baseHref = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-plugins'),
-    ) + '/';
-    // boot 脚本内联(CSP nonce 允许),消除外部 script 加载的不确定;debugBridge 随之生效
+    const baseHref = webview.asWebviewUri(shellDir) + '/';
     const bootJs = readFileSync(
-      vscode.Uri.joinPath(this.extensionUri, 'dist', 'web', 'dsh-plugins', 'boot.js').fsPath,
+      vscode.Uri.joinPath(shellDir, 'boot.js').fsPath,
       'utf8',
     ).replace(/<\/script>/gi, '<\\/script>');
-    return `<!doctype html>
-<html lang="zh-CN" style="background:transparent">
-  <head>
-    <meta charset="utf-8" />
-    <!-- unsafe-eval:上游 vite 产物(client shell)含 eval/new Function,浏览器版 3080
-         无 CSP 故无此问题;webview CSP 必须放行。产物为本地受信文件 + connect 仅
-         127.0.0.1:3080,风险受控。 -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${csp} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval' ${csp}; img-src ${csp} data: blob:; font-src ${csp} data:; connect-src http://127.0.0.1:3080 ws://127.0.0.1:3080 ${proxyBase} ${proxyWs}; worker-src ${csp} blob:;" />
-    <base href="${baseHref}" />
-    <link rel="stylesheet" href="${toWebview(asUri('assets/vendor-CjyC-hUb.css'))}" />
-    <link rel="stylesheet" href="${toWebview(asUri('assets/index-CSGf6Qzd.css'))}" />
-  </head>
-  <body style="margin:0;padding:0;height:100vh;overflow:hidden;background:transparent">
-    <div id="root" style="height:100vh"></div>
-    <script nonce="${nonce}">window.__DSH_WEB_URL__ = '${proxyBase}';</script>
-    <script nonce="${nonce}">${bootJs}</script>
-    <script type="module" nonce="${nonce}" src="${toWebview(asUri('assets/index-Dqw48FrP.js'))}"></script>
-  </body>
-</html>`;
+    const shellHtml = readFileSync(vscode.Uri.joinPath(shellDir, 'index.html').fsPath, 'utf8');
+    const cspMeta =
+      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${csp} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-eval' ${csp}; img-src ${csp} data: blob:; font-src ${csp} data:; connect-src http://127.0.0.1:3080 ws://127.0.0.1:3080 ${proxyBase} ${proxyWs}; worker-src ${csp} blob:;" />`;
+    // 注入点:head 内插 CSP/base;body 开标签后插 __DSH_WEB_URL__ + boot(先于模块脚本)
+    return shellHtml
+      .replace(/<head>/i, `<head>${baseHref ? `<base href="${baseHref}" />` : ''}${cspMeta}`)
+      .replace(/<body[^>]*>/i, (m) =>
+        `${m}<script nonce="${nonce}">window.__DSH_WEB_URL__ = '${proxyBase}';</script>`
+        + `<script nonce="${nonce}">${bootJs}</script>`,
+      );
   }
 }

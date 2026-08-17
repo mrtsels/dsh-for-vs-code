@@ -204,6 +204,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:shell": "node scripts/build-web-shell.mjs",
     "watch": "node scripts/build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint .",
