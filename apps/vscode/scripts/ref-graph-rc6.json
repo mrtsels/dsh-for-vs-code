@@ -1,6 +1,6 @@
 {
   "rev": "rc6-crop-phase9",
-  "count": 31,
+  "count": 32,
   "ids": [
     "@deepseek-ai/dsh-api-gateway",
     "@deepseek-ai/dsh-api-remotes",
@@ -32,7 +32,8 @@
     "@deepseek-ai/dsh-cordis-client-runner",
     "@deepseek-ai/dsh-session-log-export",
     "@deepseek-ai/dsh-typert-registry",
-    "@deepseek-ai/dsh-client-ui-directory-picker-native"
+    "@deepseek-ai/dsh-client-ui-directory-picker-native",
+    "dsh-file-attach"
   ],
-  "note": "Phase 9: 恢复 ui-plan(Mode/计划控制)与 ui-agent-preset(上游原生 Agent Mode 标签+新会话模式选择,2026-08 用户要求);原 28 集基线见 git 历史"
+  "note": "Phase 9 + dsh-file-attach: 新增 repo-root 插件 dsh-file-attach(client platform=web)"
 }

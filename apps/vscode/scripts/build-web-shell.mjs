@@ -65,6 +65,9 @@ function scanClientPackages() {
       pushRow(join(dir, name));
     }
   }
+  // Also scan repo-root plugin directories (e.g. dsh-file-attach/)
+  const rootPluginsDir = join(repoRoot, 'dsh-file-attach');
+  if (existsSync(rootPluginsDir)) pushRow(rootPluginsDir);
   return rows.sort((a, b) => a.id.localeCompare(b.id));
 }
 
@@ -999,7 +1002,9 @@ async function main() {
   const missing = [];
   const entries = [];
   for (const { id, pkgDir, decl } of rows) {
-    const bundle = join(pkgDir, 'lib', 'client.js');
+    const bundle = existsSync(join(pkgDir, 'lib', 'client.js'))
+      ? join(pkgDir, 'lib', 'client.js')
+      : join(pkgDir, 'lib', 'client', 'index.js');
     if (!existsSync(bundle)) {
       missing.push(`${id}(${bundle})`);
       continue;
@@ -1008,7 +1013,38 @@ async function main() {
     const rev = shortHash(content);
     const pluginDest = join(dest, 'plugins', ...id.split('/'));
     mkdirSync(pluginDest, { recursive: true });
-    writeFileSync(join(pluginDest, 'client.js'), content);
+    // Wrap in __ModuleLoader__.load() if not already wrapped (upstream plugins are pre-wrapped by tsdown)
+    let wrapped = content;
+    if (!content.includes('__ModuleLoader__')) {
+      const exports = [...content.matchAll(/^export\s+(?:const|let|var|function)\s+(\w+)/gm)].map(m => m[1]);
+      const body = content
+        .replace(/^export\s+(const|let|var)\s+(\w+)\s*=/gm, 'var $2 =')
+        .replace(/^export\s+function\s+(\w+)/gm, 'function $1')
+        .replace(/^export\s+default\s+/gm, 'var _default = ')
+        .replace(/^import\s+type\s+\{[^}]*\}\s+from\s+['\"][^'\"]+['\"];?\s*$/gm, '')
+        .replace(/^import\s+\{[^}]*\}\s+from\s+['\"][^'\"]+['\"];?\s*$/gm, '')
+        .replace(/^import\s+['\"][^'\"]+['\"];?\s*$/gm, '');
+      const exportLines = exports.map(n => `\t\texports.${n} = ${n};`).join('\n');
+      wrapped = `window.__ModuleLoader__.load({
+\tid: ${JSON.stringify(id)},
+\tfactory: (require) => {
+\t\tvar module = { exports: {} };
+\t\tvar exports = module.exports;
+\t\tObject.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+\t\tvar react = require("react");
+\t\tvar React = react;
+
+${body.split('\n').map(line => '\t\t' + line).join('\n')}
+
+${exportLines}
+
+\t\treturn module.exports;
+\t}
+});
+`;
+      console.log(`  wrapped ${id} in __ModuleLoader__.load()`);
+    }
+    writeFileSync(join(pluginDest, 'client.js'), wrapped);
     if (id === '@deepseek-ai/dsh-client-connection') {
       patchResolveBase(join(pluginDest, 'client.js'));
     }
