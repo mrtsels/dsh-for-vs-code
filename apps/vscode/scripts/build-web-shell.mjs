@@ -105,6 +105,31 @@ function patchResolveBase(clientJsPath) {
   writeFileSync(clientJsPath, body);
 }
 
+/** 桥接缝 3(cordis-client-runner):apply 内暴露页面级「确保动态插件 client half 加载」。
+ * 背景:动态插件(dsh-file-attach)的 client half 只在收到 cordis/request-run 事件或页面
+ * 主动 startUserRun 时激活;新开的页面(webview)对「已在运行」的插件不会自动加载 client half。
+ * 此缝在 `ctx.provide("dynamicCordisRunner", face)` 后暴露:
+ *   window.__dshCordisEnsureClient({agentId, pluginId, packageId, mode?})
+ *     → 已加载直接返回;否则 orchestrator.startUserRun(经 runHostHalf 直连手势挂接,
+ *       已在运行则宿主零重启 → getClientCode → 页面求值加载 client half);
+ *   window.__dshCordisIsLoaded(pluginId)
+ * 供扩展注入的 dsh-attachment-ui.js 在插件 client 未激活时驱动激活,再走
+ * window.__dshFileAttach.suggest 委托。断言式:锚点缺失即构建失败。
+ */
+function patchCordisRunnerBridge(clientJsPath) {
+  let body = readFileSync(clientJsPath, 'utf8');
+  const anchor = 'ctx.provide("dynamicCordisRunner", face);';
+  if (!body.includes(anchor)) {
+    throw new Error(
+      'cordis-runner 桥接缝失配:' + clientJsPath + ' 未找到 ' + anchor
+      + '(上游 cordis-client-runner 构建产物已变?升级专项时同步更新本脚本。)',
+    );
+  }
+  const inj = ';if(typeof window!==\'undefined\'){window.__dshCordisEnsureClient=async(r)=>{try{if(runner.isLoaded(r.pluginId))return{ok:true,already:true};return await orchestrator.startUserRun({agentId:r.agentId,pluginId:r.pluginId,packageId:r.packageId,mode:r.mode||\'run\',hasClientHalf:true,approveFutureVersions:true});}catch(e){return{ok:false,message:(e&&e.message)||String(e)}}};window.__dshCordisIsLoaded=(id)=>runner.isLoaded(id);}';
+  body = body.split(anchor).join(anchor + inj);
+  writeFileSync(clientJsPath, body);
+}
+
 /** setLocale 桥接缝:locale bundle 的 apply 里暴露 window.__dshSetLocale(id)。
  * 断言式:期望的锚点(LocaleRuntime 构造)缺失即失败。 */
 function patchSetLocaleBridge(clientJsPath) {
@@ -163,6 +188,10 @@ const EXCLUDE_PLUGINS = new Set([
  */
 const SHELL_CSS = `/* dsh-shell 布局 + 主题(静态,构建产物,与 shell rev 绑定) */
 html, body, #root { background: transparent !important; }
+/* VS Code webview 默认样式(@layer vscode-default)给 body 注入 padding: 0 20px,
+   左右各 20px(≈15pt)的透明区露出宿主深色背景 → 页面两侧"黑边"。归零:
+   内容区自带内边距,不需要 body 层再留白(unlayered 规则压过 layer)。 */
+body { padding: 0 !important; }
 [class$="_frame"], [class$="_sidebarCol"], [class$="_centerCol"], [class$="_detailsCol"] { background: transparent !important; }
 
 /* ---- 宿主变量:VS Code 主题色(sidebar 视图 vs 编辑器面板) ---- */
@@ -300,15 +329,13 @@ body, body[data-ds-dark-theme] {
 .dsh-session-header {
   display: flex; align-items: center; justify-content: center; gap: 10px;
   padding: 12px; flex: none;
-  border-bottom: 1px solid var(--dsw-alias-border-l1, var(--dsh-host-border));
 }
 .dsh-session-logo { color: var(--dsh-host-fg); flex: none; display: block; }
 /* 底部独立一行(2026-08 用户要求:新建对话按钮从右上角移到下方单独一行)。
    配色:未激活 = 白底 + 强调色边 + 强调色字;激活(hover/按下)= 强调色底 + 白字 */
 .dsh-session-footer {
   display: flex; align-items: center; justify-content: center;
-  padding: 10px 12px; flex: none;
-  border-top: 1px solid var(--dsw-alias-border-l1, var(--dsh-host-border));
+  padding: 10px 12px 80px; flex: none;
 }
 .dsh-session-new {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -350,6 +377,17 @@ body, body[data-ds-dark-theme] {
   flex: none; font-weight: 400; font-size: 11px;
   color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg));
 }
+/* ---- 文件夹行右侧操作按钮(ellipsis + new chat) ---- */
+.dsh-section-actions {
+  display: flex; align-items: center; gap: 2px; margin-left: auto;
+}
+.dsh-section-action-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border: none; border-radius: 4px;
+  background: transparent; color: var(--dsw-alias-label-tertiary, var(--dsh-host-fg));
+  cursor: pointer; padding: 0;
+}
+.dsh-section-action-btn:hover { background: var(--dsh-host-hover); color: var(--dsh-host-fg); }
 .dsh-session-rows { display: flex; flex-direction: column; gap: 1px; padding-bottom: 4px; }
 .dsh-session-row {
   display: flex; align-items: center; gap: 8px;
@@ -460,12 +498,13 @@ body, body[data-ds-dark-theme] {
        空会话 hero 与 Workspaces 页用 fixed 悬浮(左上角) ---- */
 .dsh-back-button {
   display: inline-flex; align-items: center; justify-content: center;
-  flex: none; width: 26px; height: 26px; border-radius: 6px;
-  border: none; background: transparent; color: var(--dsh-host-fg);
+  flex: none; width: 28px; height: 28px; border-radius: 50%;
+  border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.1));
+  background: transparent; color: var(--dsh-host-fg);
   cursor: pointer; padding: 0;
 }
-.dsh-back-button:hover { background: var(--dsh-host-hover); }
-.dsh-back-button svg { width: 15px; height: 15px; }
+.dsh-back-button:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsh-host-hover)); }
+.dsh-back-button svg { width: 14px; height: 14px; }
 .dsh-back-title { margin-right: 4px; }
 .dsh-back-floating { position: fixed; top: 8px; left: 8px; z-index: 1000; }
 
@@ -505,28 +544,9 @@ body.dsh-dragging .dsh-drop-overlay { display: block; }
   padding: 4px calc(var(--dsh-composer-side-clearance, 16px) + 16px) 6px;
 }
 .dsh-attach-toolbar[hidden] { display: none; }
-/* 活动文件 / 选区指示:存在即显示(无禁用灰态);
-   on = 随消息附着(普通强调色氛围),off = 仅展示(素色) */
-.dsh-attach-indicator {
-  display: inline-flex; align-items: center; gap: 5px;
-  max-width: 280px; box-sizing: border-box;
-  padding: 2px 10px; border-radius: 10px; cursor: pointer;
-  border: 1px solid var(--dsw-alias-border-l2, var(--dsh-host-border));
-  background: var(--dsh-host-bg);
-  color: var(--dsw-alias-label-secondary, var(--dsh-host-fg));
-  font-size: 11px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.dsh-attach-indicator:hover { background: var(--dsh-host-hover); }
-.dsh-attach-indicator.on {
-  border-color: var(--dsh-host-link, var(--dsh-host-accent));
-  color: var(--dsh-host-link, var(--dsh-host-accent));
-  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 12%, var(--dsh-host-bg));
-}
-.dsh-attach-indicator.on:hover {
-  background: color-mix(in srgb, var(--dsh-host-link, #4daafc) 20%, var(--dsh-host-bg));
-}
-.dsh-attach-indicator[hidden] { display: none; }
-.dsh-attach-indicator-icon { flex: none; display: inline-flex; }
+/* 活动文件指示与选区指示均已弃用(2026-08):webview 内由 dsh-file-attach 插件渲染
+   「建议附着」虚线 chip(文件 + 「N lines selected」,见 dsh-attachment-ui.ts);
+   本 shell 只保留拖入文件 chip 回退(插件缺失时)。 */
 .dsh-attach-files { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .dsh-attach-chip {
   display: inline-flex; align-items: center; gap: 4px;
@@ -600,8 +620,8 @@ const BRIDGE_JS = `(() => {
   };
   console.log = (...args) => { forwardConsole('log', args); origLog(...args); };
   console.error = (...args) => { forwardConsole('error', args); origError(...args); };
-  // 会话气泡 icon(用户要求:不用箭头;空心底,不实心)
-  const SESSIONS_ICON = '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M2 2.75A1.75 1.75 0 0 1 3.75 1h8.5A1.75 1.75 0 0 1 14 2.75v5.5A1.75 1.75 0 0 1 12.25 10H8.1l-3.5 3.1a.6.6 0 0 1-1-.46V10H3.75A1.75 1.75 0 0 1 2 8.25v-5.5Z"/></svg>';
+  // 会话列表按钮:icon_chevron_left_outline14,参照 Session log 按钮样式(浅灰圆框)
+  const SESSIONS_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.5 2.15137L8.07617 2.57617L5.34863 5.30273C5.09294 5.55843 4.86618 5.78438 4.70215 5.98828C4.53117 6.20088 4.38244 6.44405 4.33398 6.75C4.30778 6.91565 4.30778 7.08435 4.33398 7.25C4.38244 7.55595 4.53117 7.79912 4.70215 8.01172C4.86618 8.21561 5.09294 8.44157 5.34863 8.69727L8.07617 11.4238L8.5 11.8486L9.34863 11L8.92383 10.5762L6.19727 7.84863C5.92268 7.57405 5.75151 7.40124 5.6377 7.25977C5.53096 7.12709 5.52187 7.07728 5.51953 7.0625C5.51297 7.02105 5.51297 6.97895 5.51953 6.9375C5.52187 6.92272 5.53096 6.87291 5.6377 6.74023C5.75152 6.59876 5.92268 6.42595 6.19727 6.15137L8.92383 3.42383L9.34863 3L8.5 2.15137Z" fill="currentColor"/></svg>';
 
   // 1. 首开会话(仅在无已存会话时写入)
   const bootSession = window.__DSH_BOOT_SESSION__;
@@ -997,6 +1017,11 @@ async function main() {
     // 该链在 webview 环境实测不可靠:boot 快照加载与运行中推送均不触发语言更新)
     if (id === '@deepseek-ai/dsh-client-locale') {
       patchSetLocaleBridge(join(pluginDest, 'client.js'));
+    }
+    // 适配缝 3:cordis-client-runner 暴露「确保动态插件 client half 加载」页面桥 ——
+    // webview 对已运行插件不自动激活 client half(见 patchCordisRunnerBridge 注释)
+    if (id === '@deepseek-ai/dsh-cordis-client-runner') {
+      patchCordisRunnerBridge(join(pluginDest, 'client.js'));
     }
     entries.push({
       id,
