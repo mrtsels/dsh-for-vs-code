@@ -5,18 +5,19 @@ import {
   parseServerResponse,
   type RpcResult,
 } from '../src/agent/wire.js';
+import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api';
 
 describe('wire 编解码', () => {
   it('encodeClientRequest 产出完整信封', () => {
-    const req = encodeClientRequest('session.list', { cursor: 'x' }, 'rpc-1');
+    const req = encodeClientRequest('session.list', { cursor: 'x' }, RpcId('rpc-1'));
     expect(req).toEqual({ type: 'client-request', rpcId: 'rpc-1', method: 'session.list', payload: { cursor: 'x' } });
   });
 
   it('parseServerResponse 解出 result 槽(成功)', () => {
     const raw = JSON.stringify({ type: 'server-response', rpcId: 'rpc-1', result: { ok: true, value: { items: [] } } });
-    const res = parseServerResponse<{ items: unknown[] }>(raw);
+    const res = parseServerResponse(raw);
     expect(res.type).toBe('server-response');
-    expect((res.result as RpcResult<{ items: unknown[] }>).ok).toBe(true);
+    expect(res.result.ok).toBe(true);
   });
 
   it('parseServerResponse 解出错误槽', () => {

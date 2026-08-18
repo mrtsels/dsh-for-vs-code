@@ -130,7 +130,7 @@ export class HarnessRuntime {
       const text = await res.text().catch(() => '');
       throw new Error(`wire: ${method} -> HTTP ${res.status} ${text.slice(0, 120)}`);
     }
-    return parseServerResponse<T>(await res.text()).result;
+    return parseServerResponse(await res.text()).result as RpcResult<T>;
   }
 
   /** 回应当前代 server-request(approval/question 等可应答帧),P2-5 */
@@ -147,7 +147,7 @@ export class HarnessRuntime {
       throw new Error(`wire: respond -> HTTP ${res.status} ${text.slice(0, 120)}`);
     }
     const text = await res.text();
-    return parseServerResponse<unknown>(text).result;
+    return parseServerResponse(text).result as RpcResult<unknown>;
   }
 
   dispose(): void {

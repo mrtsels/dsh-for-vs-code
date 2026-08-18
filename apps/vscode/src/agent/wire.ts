@@ -5,7 +5,7 @@
  * application domain 类型保留本地。见 docs/dedup-plan.md Phase M2-M6。
  *
  * 当前已 re-export 上游：SkillEntry, MuxFrame, HostFrame, SessionEvent, SessionEventMap, TurnEndReason
- * 本地类型保留：RpcId, RpcError, RpcResult, ClientRequest, ServerResponse, TextPromptPart, PromptPart, ...
+ * 本地类型保留：RpcId, RpcError, RpcResult, TextPromptPart, PromptPart, ...
  *
  * 以适配扩展的 switch/default:break 消费模式和 webview 跨层传递。
  *
@@ -48,6 +48,8 @@
 export type { SkillEntry } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { SessionEvent, SessionEventMap, SessionEventType, TurnEndReason } from '@deepseek-ai/dsh-session/types'
 export type { SessionEvent, SessionEventMap, SessionEventType, TurnEndReason }
+import type { ClientRequest, ServerRequest, ServerResponse } from '@deepseek-ai/dsh-host-apiproxy/api'
+export type { ClientRequest, ServerRequest, ServerResponse }
 import { createRpcId } from './wire-adapters.js'
 export { createRpcId } from './wire-adapters.js'
 
@@ -56,13 +58,8 @@ export { createRpcId } from './wire-adapters.js'
 
 export type RpcId = string;
 
-/** client → host(HTTP POST /api/<method>) */
-export interface ClientRequest<P = unknown> {
-  type: 'client-request';
-  rpcId: RpcId;
-  method: string;
-  payload: P;
-}
+// ClientRequest, ServerResponse, ServerRequest 已从上游 re-export（见顶部 import）
+// 上游 non-generic：payload/result 均为 unknown，泛型仅保留在 request<T>() 业务边界
 
 export interface RpcError {
   code: string;
@@ -73,21 +70,6 @@ export interface RpcError {
 export type RpcResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: RpcError };
-
-/** host → client(HTTP 响应) */
-export interface ServerResponse<T = unknown> {
-  type: 'server-response';
-  rpcId: RpcId;
-  result: RpcResult<T>;
-}
-
-/** host → client(WS 下行帧信封) */
-export interface ServerRequest<P = unknown> {
-  type: 'server-request';
-  rpcId: RpcId;
-  method: string;
-  payload: P;
-}
 
 /** 文本 prompt 内容块（Phase 1 只发文本） */
 export interface TextPromptPart {
@@ -170,12 +152,12 @@ export interface SessionSummary {
   };
 }
 
-export function encodeClientRequest(method: string, payload: unknown, rpcId: RpcId = createRpcId()): ClientRequest {
+export function encodeClientRequest(method: string, payload: unknown, rpcId: ReturnType<typeof createRpcId> = createRpcId()): ClientRequest {
   return { type: 'client-request', rpcId, method, payload };
 }
 
 /** 解析 HTTP 响应文本 → ServerResponse；非 JSON / 非信封即抛错（不静默丢消息） */
-export function parseServerResponse<T = unknown>(text: string): ServerResponse<T> {
+export function parseServerResponse(text: string): ServerResponse {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -185,16 +167,16 @@ export function parseServerResponse<T = unknown>(text: string): ServerResponse<T
   if (typeof raw !== 'object' || raw === null || raw['type' as keyof object] !== 'server-response') {
     throw new Error('wire: response is not a server-response envelope');
   }
-  return raw as ServerResponse<T>;
+  return raw as ServerResponse;
 }
 
 /** WS 帧信封 → ServerRequest（未知帧不抛错，由调用方按 catch-all 处理） */
-export function parseServerRequestFrame(raw: string): ServerRequest<unknown> {
+export function parseServerRequestFrame(raw: string): ServerRequest {
   const parsed: unknown = JSON.parse(raw);
   if (typeof parsed !== 'object' || parsed === null || (parsed as { type?: string }).type !== 'server-request') {
     throw new Error('wire: ws frame is not a server-request envelope');
   }
-  return parsed as ServerRequest<unknown>;
+  return parsed as ServerRequest;
 }
 
 /** dynamicCordisRunner/inventory 行（窄化子集；完整契约见 dsh-cordis-host-runner typert） */
