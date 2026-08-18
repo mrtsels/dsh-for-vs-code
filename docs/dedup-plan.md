@@ -2,6 +2,8 @@
 
 > **目标**：消除 `apps/vscode/src/` 中与 `vendor/deepseek-harness/` 上游源码重复的代码，改为直接 import 上游包，使 vendor rev 更新（git pull）时扩展自动获得最新类型/逻辑。
 >
+> **Vendor rev 更新记录**：2026-08-18 从 rc.5 (`47f94385`) 拉到 rc.7 (`99f6f02`)，经三路子代理验证：**方案完全有效**，唯一变化是 `settings-not-exposed` 错误码被删除（扩展不引用此码，零影响）。详细 diff 见 [dedup-diff.md](dedup-diff.md) / [dedup-plan-rc7-validity.md](dedup-plan-rc7-validity.md) / [dedup-file-diff.md](dedup-file-diff.md)。
+>
 > **约束**：不改 vendor 内任何源码（红线）；esbuild `bundle: true` + `external: ['vscode']` 可解析 vendor 包。
 
 ---
@@ -175,7 +177,7 @@ export class HarnessRuntime {
 
 ### 5.1 import 路径方案
 
-vendor 是嵌套 workspace（自带 `pnpm-workspace.yaml`），不能直接作为外层 pnpm dependency。方案：
+vendor 是嵌套 workspace（自带 `pnpm-workspace.yaml`），不能直接作为外层 pnpm dependency。**vendor rev 当前 `99f6f02` (rc.7)**。方案：
 
 **方案 A：tsconfig paths + esbuild alias（推荐）**
 ```json

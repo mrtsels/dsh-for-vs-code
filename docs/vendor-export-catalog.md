@@ -1,6 +1,7 @@
 # Vendor Package Export Catalog
 
-> Scanned from `vendor/deepseek-harness/packages/` (rev rc.5 = `47f94385`)
+> Scanned from `vendor/deepseek-harness/packages/` (rev rc.7 = `99f6f02`)
+> **Last verified**: 2026-08-18 against rc.7
 > Extension source: `apps/vscode/src/`
 
 ---
