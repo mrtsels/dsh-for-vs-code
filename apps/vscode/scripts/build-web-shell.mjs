@@ -307,8 +307,8 @@ body, body[data-ds-dark-theme] {
   --dsw-specific-tip: color-mix(in srgb, var(--dsh-host-link) 12%, var(--dsh-host-bg));
 }
 
-/* ---- 布局:对话模式显示中心列 + sidebar rail(保留 Add workspace 等图标) ---- */
-[class$="_frame"] { grid-template-columns: 56px minmax(0, 1fr) 0px !important; }
+/* ---- 布局:对话模式只显示中心列(自适应 webview 宽度) ---- */
+[class$="_frame"] { grid-template-columns: 0px minmax(0, 1fr) 0px !important; }
 [class$="_sidebarCol"] { overflow: hidden; }
 [class$="_handle"] { display: none !important; }
 
