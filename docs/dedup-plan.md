@@ -282,7 +282,7 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 - [x] M3-4：extension.ts onHostFrame 回调增加 controller.handleHostFrame(frame) 调用 ✅
 - [x] M3-5：适配 branded SessionId 消费点 ✅（仅测试文件需要，源码安全）
 - [x] M3-6：runtime.ts 参数类型改为 upstream exact type ✅
-- [ ] M3-7：G0 typecheck 验证（剩余 M4 SessionEvent 类型冲突待修）
+- [x] M3-7：G0 typecheck 验证 ✅（仅既有 extension.ts 参数错误）（剩余 M4 SessionEvent 类型冲突待修）
 
 > M3 决策（ChatGPT 确认）：
 > - host/agent-error 是 HostFrame 变体，不是 SessionEvent type → 移到 handleHostFrame（选 B）
