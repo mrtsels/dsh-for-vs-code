@@ -1,8 +1,12 @@
 /**
  * wire.ts — dsh web 四象限 RPC 消息模型与编解码。
  *
- * 本文件定义扩展侧使用的全部 wire/域类型。类型设计为**宽松兼容**
- * （RpcId = string 而非 branded，SessionEvent.data = unknown bag），
+ * 迁移策略（D→C）：protocol boundary 类型逐步 re-export 上游，
+ * application domain 类型保留本地。见 docs/dedup-plan.md Phase M2-M6。
+ *
+ * 当前已 re-export 上游：SkillEntry
+ * 待迁移（M3-M5）：RpcResult, MuxFrame, HostFrame, SessionEvent, ClientRequest, ServerResponse
+ *
  * 以适配扩展的 switch/default:break 消费模式和 webview 跨层传递。
  *
  * ── 上游对应关系（vendor rev rc.7 = 99f6f02） ──────────────────────
@@ -38,6 +42,14 @@
  *   2. 编解码函数内用 as 断言转为上游类型（wire 传输层）
  *   3. 待全部消费者收窄后，逐个替换为上游类型
  */
+
+// ─── 上游 re-export（Phase M2：无冲突类型） ────────────────────────
+
+export type { SkillEntry } from '@deepseek-ai/dsh-host-apiproxy/api'
+import { createRpcId } from './wire-adapters.js'
+export { createRpcId } from './wire-adapters.js'
+
+// ─── 本地类型（待 M3-M5 逐步迁移） ────────────────────────────────
 
 export type RpcId = string;
 
@@ -120,13 +132,7 @@ export interface JobView {
   finishedAt?: number;
 }
 
-/** Skill 目录条目（P3-2，skills.d.ts SkillEntry） */
-export interface SkillEntry {
-  name: string;
-  description: string;
-  whenToUse?: string;
-  modelInvocable: boolean;
-}
+// SkillEntry 已从上游 re-export（见顶部 import）
 
 /** 子代理目录条目（P3-3，subagents.d.ts SubagentListEntry） */
 export type SubagentEntry =
@@ -206,7 +212,7 @@ export interface SessionSummary {
   };
 }
 
-export function encodeClientRequest(method: string, payload: unknown, rpcId: RpcId = crypto.randomUUID()): ClientRequest {
+export function encodeClientRequest(method: string, payload: unknown, rpcId: RpcId = createRpcId()): ClientRequest {
   return { type: 'client-request', rpcId, method, payload };
 }
 

@@ -32,7 +32,8 @@
       "@deepseek-ai/dsh-session": [
         "../../vendor/deepseek-harness/packages/core/session/src/index.ts"
       ]
-    }
+    },
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src",
