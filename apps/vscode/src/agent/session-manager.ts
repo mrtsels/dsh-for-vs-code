@@ -59,15 +59,17 @@ export class SessionManager {
     }
     switch (frame.type) {
       case 'session/event': {
+        // wire.ts 已 re-export 上游 SessionEvent,frame.event 与 state.events 同型;
+        // 保留 as 断言以防御 MuxFrame discriminated union 可能的窄化边界差异
+        const localEvent = frame.event as SessionEvent;
         const state = this.ensure(frame.sessionId);
-        state.events.push(frame.event);
-        state.lastSeq = frame.event.seq;
-        if (frame.event.type === 'turn/start') state.running = true;
-        else if (frame.event.type === 'turn/end') state.running = false;
-        if (frame.event.type === 'session/title' && typeof frame.event.data.title === 'string') {
-          state.title = frame.event.data.title;
-        }
-        this.onEvents?.(frame.sessionId, [frame.event]);
+        state.events.push(localEvent);
+        state.lastSeq = localEvent.seq;
+        if (localEvent.type === 'turn/start') state.running = true;
+        else if (localEvent.type === 'turn/end') state.running = false;
+        // session/title 不是合法 wire event — 标题从 session/projection 帧和
+        // seedHistory projections.values.title 获取(handleMuxFrame projection 分支 + L137)
+        this.onEvents?.(frame.sessionId, [localEvent]);
         break;
       }
       case 'session/subscribed': {
