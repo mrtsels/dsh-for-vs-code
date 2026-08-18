@@ -318,11 +318,19 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 > rpc.ts 的 RpcEnvelope/RpcResult 保留本地（webview 侧独立抽象层）。
 
 ### Phase M6：D2 rpc.ts -> WebApiClient + D3 runtime.ts -> ConnectionController
-- [ ] M6-1：创建 DshWebApiClient 子类（覆盖 resolveBase()，~10 行）
-- [ ] M6-2：扩展进程内 postRpc 调用 -> api.sessions.list() 等 typed 方法
-- [ ] M6-3：创建 ConnectionWrapper（~100 行 wrapper 补齐 rebase/subscribeStatus/lastError）
-- [ ] M6-4：HarnessRuntime -> ConnectionWrapper 替换
-- [ ] M6-5：G0 四门验证 + smoke-shell 冒烟
+- [ ] M6.1：DshWebApiClient 子类（覆盖 resolveBase）+ ConnectionWrapper（RuntimeApi 兼容 facade）
+- [ ] M6.2：HarnessRuntime → ConnectionWrapper 替换 + 删除 runtime.ts
+- [ ] M6.3：扩展进程 postRpc() → DshWebApiClient（bootstrap/settings-bridge/extension）
+- [ ] M6.4：rpc.ts 拆分 → webview/rpc.ts（保留）+ 删除旧共享 rpc.ts
+- [ ] M6.5：G0 四门验证 + smoke-shell + test 重写
+
+> M6 策略（ChatGPT 确认）：
+> - Direction A：完整替换，不是部分替换
+> - ConnectionWrapper 很薄：只做 rebase/subscribeStatus/lastError/currentState/connect Promise
+> - 不修改 upstream ConnectionController
+> - rpc.ts 扩展侧删除，webview 侧保留到 webview/ 目录
+> - 不用 feature flag，分 commit + git revert 回滚
+> - 测试：connection-wrapper.test.ts + web-api-client.test.ts
 
 > D2/D3 可行性详情见 dedup-d2-d3-feasibility.md
 
