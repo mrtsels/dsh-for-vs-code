@@ -334,16 +334,20 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 
 > D2/D3 可行性详情见 dedup-d2-d3-feasibility.md
 
-### Phase M7：UI component dedup（上游 UI 组件复用）
-- [ ] M7-1：package.json description 动态化（preset 名册从 api.agentPreset.list() 获取，不硬编码）
-- [ ] M7-2：评估 ui-agent-preset 复用可行性（webview bundle 兼容性、Cordis 依赖链）
-- [ ] M7-3：webview preset picker 复用上游组件（如果可行）或至少同步显示名（code→PTC, cordis→Creator）
-- [ ] M7-4：settings-bridge preset roster 动态化（已用 DshWebApiClient，确认无硬编码名）
-- [ ] M7-5：G0 验证
+### Phase M7：UI presentation dedup（上游 locale 数据复用）
+- [x] M7-1：创建 preset/presentation.ts ✅
+- [x] M7-2：package.json description 去掉硬编码 preset 名册 ✅
+- [x] M7-3：extension.ts preset 选择命令用 getPresetDisplayName() ✅
+- [x] M7-4：SessionView.tsx 不需要改（不显示 preset 名） ✅
+- [x] M7-5：G0 typecheck 通过 ✅
 
-> M7 动机：rc.5→rc.7 上游将 "code" 重命名为 "PTC mode"、"cordis" 重命名为 "Creator mode"，
-> 扩展 package.json description 仍硬编码旧名。根本原因：扩展自维护 preset 展示逻辑，
-> 未复用上游 ui-agent-preset 包的本地化字符串和 React 组件。
+> M7 策略（ChatGPT 确认）：
+> - 复用上游 ui-agent-preset/locales.ts 作为 presentation data source
+> - 不引入 React 组件（Cordis 依赖链过重）
+> - 不引入 Cordis runtime
+> - Preset ID ≠ display name：API 用 ID，UI 用 display name
+> - unknown preset fallback 返回 ID 本身
+> - M7 是 metadata/presentation dedup，不做 component/runtime convergence
 
 ### 迁移工具约定
 - @ts-expect-error 标签格式：// @ts-expect-error UPSTREAM-MIGRATION(类型名): 原因
