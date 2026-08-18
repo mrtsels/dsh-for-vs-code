@@ -30,8 +30,13 @@ const extension = {
   logLevel: 'info',
   alias: {
     '@deepseek-ai/dsh-host-apiproxy/api': resolve(app, '../../vendor/deepseek-harness/packages/host/apiproxy/src/api/index.ts'),
+    '@deepseek-ai/dsh-host-apiproxy/api/events.schema': resolve(app, '../../vendor/deepseek-harness/packages/host/apiproxy/src/api/events.schema.ts'),
+    '@deepseek-ai/dsh-host-apiproxy/api/rpc': resolve(app, '../../vendor/deepseek-harness/packages/host/apiproxy/src/api/rpc.ts'),
+    '@deepseek-ai/dsh-host-apiproxy/api/rpc.schema': resolve(app, '../../vendor/deepseek-harness/packages/host/apiproxy/src/api/rpc.schema.ts'),
     '@deepseek-ai/dsh-client-connection/client': resolve(app, '../../vendor/deepseek-harness/packages/client/connection/src/client/index.ts'),
     '@deepseek-ai/dsh-session/types': resolve(app, '../../vendor/deepseek-harness/packages/core/session/src/types.ts'),
+    '@deepseek-ai/dsh-session/invariant': resolve(app, '../../vendor/deepseek-harness/packages/core/session/src/invariant.ts'),
+    '@deepseek-ai/dsh-session/surface': resolve(app, '../../vendor/deepseek-harness/packages/core/session/src/surface.ts'),
     '@deepseek-ai/dsh-session': resolve(app, '../../vendor/deepseek-harness/packages/core/session/src/index.ts'),
   },
 };
