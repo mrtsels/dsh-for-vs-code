@@ -214,6 +214,15 @@ DeepSeek Harness（`dsh`）的 VS Code 客户端：复用上游 Agent Runtime / 
    一致）。教训：路径检测器对「以 / 开头的 token」太宽 —— 注释/纯斜杠是高频误报，识别
    前先排除纯斜杠序列；验证失败的拒绝对 UI **静默**（suggest 早已静默，add 也应对齐）。
 
+- **目录选择走 native plugin，不走 browse**（2026-08-18 实测）：`conversation.hero.workspace.directoryFlow`
+  slot 的 occupant 决定 "Add workspace..." 点击后的行为。上游有两个实现：
+  `ui-directory-picker-browse`（renderful in-app 浏览器，调 `host.listDirectory`）和
+  `ui-directory-picker-native`（renderless，调 `host.pickDirectory`）。
+  Route A 排除 browse、保留 native；native occupant 不渲染任何 UI，直接调 `host.pickDirectory`
+  RPC → proxy 拦截 → `vscode.window.showOpenDialog()` → 返回路径 → `onPicked(path)`。
+  **不要拦截 `host.listDirectory`**（语义是列出目录内容，不是选择目录）。
+  wire 响应格式：`{ type:'server-response', rpcId, result:{ ok:true, value:{ path:string|null } } }`
+
 ## 架构文档维护
 
 - **ARCH.md 是唯一架构全图**（分层/模块地图/数据流/wire 协议/构建管线/文件→功能速查表），与 AGENTS.md 互补：本文件管**约束与规范**，ARCH.md 管**代码导航与结构**。
