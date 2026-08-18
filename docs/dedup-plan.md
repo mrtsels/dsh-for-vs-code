@@ -262,15 +262,18 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 - [x] typecheck 通过
 - [x] ARCH.md / AGENTS.md / versions.md 同步
 
-### Phase M2：无冲突类型直接 re-export + createRpcId factory
-- [ ] M2-1：wire.ts re-export 无兼容性问题的类型：RpcResult、JobView、SkillEntry
-- [ ] M2-2：wire-adapters.ts 创建 createRpcId(): RpcId factory（内部 RpcId(crypto.randomUUID())）
-- [ ] M2-3：runtime.ts 中所有 crypto.randomUUID() -> createRpcId()
-- [ ] M2-4：rpc.ts 中 postRpc 的 rpcId 构造 -> createRpcId()
-- [ ] M2-5：G0 typecheck 验证
+### Phase M2：无冲突类型 re-export + createRpcId factory（2026-08-18 已完成 ✅）
+- [x] M2-1：wire.ts re-export SkillEntry（上游 @deepseek-ai/dsh-host-apiproxy/api）
+- [x] M2-2：wire-adapters.ts 创建 createRpcId(): RpcId factory
+- [x] M2-3：wire.ts encodeClientRequest 默认 rpcId 改用 createRpcId()
+- [x] M2-5：G0 typecheck 通过（仅既有 ContextAttachmentManager 参数错误）
 
-> M2 策略：只迁移没有兼容性问题的类型。RpcResult 形状完全一致；JobView/SkillEntry
-> 字段匹配。RpcId 通过 factory 模式集中迁移，不降级 brand。
+> M2 实测：原计划 re-export RpcResult/JobView/SkillEntry，实测仅 SkillEntry 无冲突：
+> - RpcResult ❌ — 引用上游 RpcError（discriminated union ~40 codes），与本地 {code:string} 不兼容
+> - JobView ❌ — id 字段使用 branded JobId，与本地 string 不兼容
+> - SkillEntry ✅ — readonly 修饰符兼容，无 branded 类型，字段形状一致
+>
+> tsconfig 新增 allowImportingTsExtensions（上游 .ts 扩展名导入需要）。
 
 ### Phase M3：MuxFrame / HostFrame 拆分
 - [ ] M3-1：wire.ts 定义 type IncomingFrame = MuxFrame | HostFrame（从 upstream re-export）
