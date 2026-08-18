@@ -227,37 +227,101 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 
 ---
 
-## 6. 实施计划
+## 6. 迁移策略（2026-08-18 ChatGPT 方案 + 实测修正）
 
-### Phase D1：wire.ts 基础设施 + 上游映射（2026-08-18 已完成）
-- [x] D1-1：`apps/vscode/tsconfig.json` 添加 paths（4 个 vendor 包 → 源码路径）
-- [x] D1-2：`scripts/build.mjs` extension build 添加 esbuild alias（同 4 包）
-- [x] D1-7：typecheck 通过（`npx tsc --noEmit` exit 0，1 既有错误非本次引入）
-- [~] D1-3：wire.ts re-export barrel — **实测不可行**：上游类型更精确（RpcId branded、RpcResult 非泛型、MuxFrame discriminated union），直接 re-export 导致消费者类型不兼容。改为：wire.ts 头部添加 16 类型映射表（记录上游对应关系），本地类型保留。
-- [~] D1-4/5/6：适配 branded RpcId / 精确 MuxFrame / SessionEvent — **被 D1-3 阻塞**。待消费者逐个收窄后方可迁移。
+**总策略**：D（按 protocol/application boundary 分层）→ C（最终收敛到上游 exact type）。
 
-> **实测结论**：上游类型比扩展更精确（branded RpcId、~40 代码 RpcError、13+ 事件类型
-> SessionEvent），扩展的宽松类型设计（`RpcId = string`、`EventData = unknown bag`）是
-> 有意为之（消费方用 switch/default:break，不依赖精确类型）。正确策略是"记录映射 +
-> 逐步收窄"，而非"一刀切 re-export"。
+核心原则：**按类型属于 protocol 还是 extension domain 决定保留/迁移，而非按难度。**
 
-### Phase D2：rpc.ts → WebApiClient（评估完成，实施待定）
-- [x] D2-1：`WebApiClient` **无 Cordis 依赖**，可独立构造（构造只需 baseUrl）
-- [~] D2-2/3：需创建 `DshWebApiClient` 子类覆盖 `resolveBase()`（~10 行），响应结构
-  需适配（`{result?:RpcResult}` → `RpcResponse<T>`）；webview 侧保持内联 RPC。
-- [ ] D2-4：G0 四门验证
+```
+                 Upstream wire types
+                       |
+                       v
+              +-----------------+
+              | Transport layer |  wire.ts: re-export upstream exact types
+              | runtime/proxy   |
+              +--------+--------+
+                       | exact
+                       v
+              +-----------------+
+              | Adapter /       |  wire-adapters.ts: createRpcId(), TypedClientRequest<P>, IncomingFrame
+              | normalization   |
+              +--------+--------+
+                       | app-friendly
+                       v
+              +-----------------+
+              | Extension logic |  保留宽松类型的地方（仅 UI/webview DTO）
+              | UI/session/etc. |
+              +-----------------+
+```
 
-### Phase D3：runtime.ts → ConnectionController（评估完成，实施待定）
-- [x] D3-1：`ConnectionController` **无 Cordis 依赖**，构造只需 `IApiClient + ConnectionSinks`
-- [~] D3-2：可全量替换，需 ~100 行 wrapper 补齐 rebase/subscribeStatus/lastError/connect Promise
-- [ ] D3-3/4：实施 + G0 验证
+### Phase M1：基础设施 + 无冲突 re-export（2026-08-18 已完成）
+- [x] tsconfig.json paths（4 vendor 包）
+- [x] esbuild alias（4 vendor 包）
+- [x] wire.ts 16 类型映射表（记录上游对应关系）
+- [x] typecheck 通过
+- [x] ARCH.md / AGENTS.md / versions.md 同步
 
-> **D2/D3 可行性详情**见 [dedup-d2-d3-feasibility.md](dedup-d2-d3-feasibility.md)
+### Phase M2：无冲突类型直接 re-export + createRpcId factory
+- [ ] M2-1：wire.ts re-export 无兼容性问题的类型：RpcResult、JobView、SkillEntry
+- [ ] M2-2：wire-adapters.ts 创建 createRpcId(): RpcId factory（内部 RpcId(crypto.randomUUID())）
+- [ ] M2-3：runtime.ts 中所有 crypto.randomUUID() -> createRpcId()
+- [ ] M2-4：rpc.ts 中 postRpc 的 rpcId 构造 -> createRpcId()
+- [ ] M2-5：G0 typecheck 验证
 
-### Phase D4：文档同步（2026-08-18 已完成）
-- [x] D4-1：ARCH.md（§3 目录地图 wire.ts 描述更新）
-- [x] D4-2：AGENTS.md（Pitfalls 新增 vendor 类型导入基础设施说明）
-- [x] D4-3：docs/versions.md（vendor rev 更新至 rc.7 = 99f6f02）
+> M2 策略：只迁移没有兼容性问题的类型。RpcResult 形状完全一致；JobView/SkillEntry
+> 字段匹配。RpcId 通过 factory 模式集中迁移，不降级 brand。
+
+### Phase M3：MuxFrame / HostFrame 拆分
+- [ ] M3-1：wire.ts 定义 type IncomingFrame = MuxFrame | HostFrame（从 upstream re-export）
+- [ ] M3-2：runtime.ts 的 onMuxFrame / onHostFrame 回调参数类型改为 upstream exact type
+- [ ] M3-3：session-manager.ts 的 handleMuxFrame 拆为 handleMuxFrame(MuxFrame) + handleHostFrame(HostFrame)
+- [ ] M3-4：controller.ts switch 补齐 HostFrame 变体（host/agent-error 等从 MuxFrame 移到 HostFrame 处理）
+- [ ] M3-5：extension.ts 中 MuxFrame import 更新
+- [ ] M3-6：G0 typecheck 验证
+
+> M3 策略：先拆 union boundary，再逐个迁移。host/agent-error 不是 MuxFrame 的变体，
+> 是 HostFrame 的变体——这是 architecture 问题，不是 TS 太严格。拆开后每个 handler
+> 只处理自己的 union，switch 自然完整。
+
+### Phase M4：SessionEvent exact union 迁移
+- [ ] M4-1：wire.ts re-export upstream SessionEvent、SessionEventMap、TurnEndReason
+- [ ] M4-2：session-manager.ts 事件消费改用 narrowing（switch (event.type) 后 event.data.turn 等自动推导）
+- [ ] M4-3：bridge.ts 中 SessionEvent import 更新
+- [ ] M4-4：chat-stream.ts 中 SessionEvent import 更新
+- [ ] M4-5：删除旧 EventData loose type
+- [ ] M4-6：G0 typecheck 验证
+
+> M4 策略：这是改动最大的一步。上游 SessionEvent<'turn/end'> 的 data.reason
+> 是 TurnEndReason（discriminated union），不再是 string。消费方通过
+> switch (event.type) 自动 narrowing，无需手动断言。
+
+### Phase M5：Generic compatibility layer
+- [ ] M5-1：wire-adapters.ts 定义 TypedClientRequest<P> 和 TypedServerResponse<T>
+  （Omit<Upstream, 'payload'> & { payload: P } 等）
+- [ ] M5-2：wire.ts re-export upstream ClientRequest、ServerResponse（non-generic）
+- [ ] M5-3：runtime.ts 中需要泛型的地方改用 TypedClientRequest<P>
+- [ ] M5-4：rpc.ts 中 postRpc 返回类型适配
+- [ ] M5-5：删除旧 generic ClientRequest<P> / ServerResponse<T> local 定义
+- [ ] M5-6：G0 typecheck 验证
+
+> M5 策略：泛型兼容层命名为 TypedXxx（不叫 ClientRequest），语义清晰：
+> ClientRequest = upstream wire protocol；TypedClientRequest<P> = extension typed helper。
+
+### Phase M6：D2 rpc.ts -> WebApiClient + D3 runtime.ts -> ConnectionController
+- [ ] M6-1：创建 DshWebApiClient 子类（覆盖 resolveBase()，~10 行）
+- [ ] M6-2：扩展进程内 postRpc 调用 -> api.sessions.list() 等 typed 方法
+- [ ] M6-3：创建 ConnectionWrapper（~100 行 wrapper 补齐 rebase/subscribeStatus/lastError）
+- [ ] M6-4：HarnessRuntime -> ConnectionWrapper 替换
+- [ ] M6-5：G0 四门验证 + smoke-shell 冒烟
+
+> D2/D3 可行性详情见 dedup-d2-d3-feasibility.md
+
+### 迁移工具约定
+- @ts-expect-error 标签格式：// @ts-expect-error UPSTREAM-MIGRATION(类型名): 原因
+- 优先级：narrowing > factory > satisfies > type assertion > @ts-expect-error
+- 禁止：@ts-ignore、降级 branded type 到 string、在 wire.ts 重新复制 upstream 类型
+- 债务追踪：rg "UPSTREAM-MIGRATION" src/ 可列出全部迁移债务
 
 ---
 
