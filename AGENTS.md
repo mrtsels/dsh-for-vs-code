@@ -25,7 +25,7 @@ DeepSeek Harness（`dsh`）的 VS Code 客户端：复用上游 Agent Runtime / 
 
 ## 协议与版本
 
-- **锁 dsh 版本**（运行时 0.1.0-rc.6 @ 3080；UI 源码锁 rc.5 = `47f94385`，记入 docs/versions.md）；升级只做专项 + 全量回归（R1/R4）
+- **锁 dsh 版本**（运行时 0.1.0-rc.6 @ 3080；UI 源码 rev rc.7 = `99f6f02`，记入 docs/versions.md）；升级只做专项 + 全量回归（R1/R4）
 - 端点 `POST /api/<method>`（裸 `/api` 404）；信封 `{type:"client-request", rpcId, method, payload}` → `server-response`；WS 帧为 `server-request`（host→client）。协议细节见 `docs/http-bridge.md`
 - 服务仅绑 127.0.0.1、无鉴权：禁 `--host 0.0.0.0`；信任栅栏 loopback / `trustedHosts`，失败 403
 - 实例 cwd 绑定：握手后对比 `host.describe.cwd` 与工作区，不一致必须警告（P1-15）

@@ -98,7 +98,7 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 
 ### 0.2 路线 A(源码构建;替代 fetch+boot)
 
-- **vendor/deepseek-harness**(submodule,只读,锁 `47f94385` = 0.1.0-rc.5;上游 master 无 rc.6 源码 rev,
+- **vendor/deepseek-harness**(submodule,只读,rev `99f6f02` = 0.1.0-rc.7;
   rc.6 仅 npm 产物,协议差异由 P5-5 冒烟把关)。
 - **vendor 内独立 workspace 构建**(嵌套 workspace 不入外层,见 pnpm-workspace.yaml 注释):
   `corepack pnpm install --frozen-lockfile` → `pnpm run build:lib:client`(tsc + tsdown →
@@ -133,7 +133,7 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 
 ### 0.4 版本与协议
 
-- 运行时锁 dsh 0.1.0-rc.6(3080);UI 源码锁 rc.5(`47f94385`,记 docs/versions.md);
+- 运行时锁 dsh 0.1.0-rc.6(3080);UI 源码 rev rc.7(`99f6f02`,记 docs/versions.md);
   **升级只做专项 + 全量回归**。
 - 端点 `POST /api/<method>`(裸 `/api` 404);信封 `{type:"client-request", rpcId, method, payload}`
   → `server-response`;WS 帧 `server-request`(host→client)。详见 docs/http-bridge.md。
