@@ -339,17 +339,15 @@ body, body[data-ds-dark-theme] {
 }
 .dsh-session-new {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  height: 30px; padding: 0 18px; border-radius: 6px; flex: none;
-  border: 1px solid var(--dsh-host-accent);
-  background: #ffffff;
-  color: var(--dsh-host-accent);
-  font-size: 12px; line-height: 1; cursor: pointer; white-space: nowrap;
+  height: 38px; padding: 8px 16px; border-radius: 12px; flex: none;
+  border: 1px solid var(--dsw-alias-border-l2, rgba(0,0,0,.1));
+  background: var(--dsw-alias-button-elevated-fill, #ffffff);
+  color: var(--dsw-alias-label-primary, var(--dsh-host-fg));
+  font-size: 14px; font-weight: 500; line-height: 22px;
+  cursor: pointer; white-space: nowrap;
 }
-.dsh-session-new:hover,
-.dsh-session-new:active {
-  background: var(--dsh-host-accent);
-  color: #ffffff;
-  border-color: var(--dsh-host-accent);
+.dsh-session-new:hover {
+  background: var(--dsw-alias-button-floating-hover, var(--dsh-host-hover));
 }
 .dsh-session-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 8px 16px; }
 /* ---- workspace 分组 + 会话行(2026-08-20 P1/P2:分组/运行状态/归档折叠;
