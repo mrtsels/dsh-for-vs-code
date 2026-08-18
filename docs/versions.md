@@ -10,7 +10,7 @@
 | pnpm | 10.32.1 | 本仓库 `packageManager` 字段锁定 |
 | dsh(全局) | 0.1.0-rc.6 | `~/.npm-global`;协议契约见 TASK §0.3,**升级必须回归** |
 | dsh web 实例 | http://127.0.0.1:3080 | cwd=`/Users/minimx/dsh-for-vs-code`;模型 deepseek-v4-flash |
-| vendor/deepseek-harness(submodule) | `47f94385`(0.1.0-rc.5,2026-08-13) | Route A UI 源码基线;上游 master 无 rc.6 源码 rev;**实测 rc.5 源码构建产物与 rc.6 npm 产物(3080 dist)字节级一致,协议漂移风险已实测消除**;升级=submodule update + 全量回归 |
+| vendor/deepseek-harness(submodule) | `99f6f02`(0.1.0-rc.7,2026-08-18) | Route A UI 源码基线;经 dedup 方案验证,rc.5→rc.7 类型零变化;**待重新 build:lib:client + build:web + build:shell 验证产物**;升级=submodule update + 全量回归 |
 | vendor 构建工具链 | corepack pnpm 11.7.0 | 随上游 packageManager 锁定;安装用 `--ignore-scripts`(lefthook postinstall 在 submodule 下失败,与构建无关) |
 
 ## 扩展依赖(devDependencies,精确版见 pnpm-lock.yaml)
