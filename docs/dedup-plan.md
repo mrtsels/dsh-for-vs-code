@@ -292,11 +292,11 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 > - 这次 migration 的核心价值是暴露原来被宽松类型隐藏的逻辑错误（host/agent-error 就是一例）
 
 ### Phase M4：SessionEvent exact union 迁移（ChatGPT 方案确认）
-- [ ] M4-1：wire.ts re-export upstream SessionEvent + SessionEventMap + SessionEventType + TurnEndReason，删除本地 SessionEvent/EventData/Chunk
-- [ ] M4-2：session-manager.ts — 删除 session/title 事件处理（改从 SessionSummary projection 取标题），state.events 改为 upstream SessionEvent[]
-- [ ] M4-3：bridge.ts / chat-stream.ts — SessionEvent import 更新
-- [ ] M4-4：test/session-manager.test.ts — fixture 改为 upstream exact shape（data.reason = {kind:'completed'} 等）
-- [ ] M4-5：G0 typecheck 验证
+- [x] M4-1：wire.ts re-export upstream SessionEvent + SessionEventMap + TurnEndReason，删除本地 SessionEvent/EventData/Chunk ✅
+- [x] M4-2：session-manager.ts — 删除 session/title 事件处理 ✅
+- [x] M4-3：chat-stream.ts — assistant/message content 访问修正 ✅
+- [x] M4-4：测试 fixture 全部改为 upstream exact shape ✅（data.reason = {kind:'completed'} 等）
+- [x] M4-5：G0 typecheck 通过 ✅
 
 > M4 决策（ChatGPT 确认）：
 > - session/title 不是合法 wire event → 标题从 SessionSummary.projections.values.title 获取
