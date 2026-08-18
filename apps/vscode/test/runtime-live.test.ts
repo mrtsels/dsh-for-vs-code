@@ -3,7 +3,7 @@
  * 服务不可达时自动跳过(保持 G0 全绿);DSH_LIVE=1 时强制运行。
  */
 import { describe, expect, it } from 'vitest';
-import { HarnessRuntime } from '../src/agent/runtime.js';
+import { ConnectionWrapper } from '../src/api/connection-wrapper.js';
 
 const BASE_URL = process.env.DSH_BASE_URL ?? 'http://127.0.0.1:3080';
 
@@ -21,15 +21,15 @@ async function isReachable(): Promise<boolean> {
 
 const live = (await isReachable()) || process.env.DSH_LIVE === '1';
 
-describe.runIf(live)('HarnessRuntime @live', () => {
+describe.runIf(live)('ConnectionWrapper @live', () => {
   it('连接就绪:host.describe 返回 cwd/model,状态到 connected', async () => {
     const statuses: string[] = [];
-    const runtime = new HarnessRuntime({
+    const runtime = new ConnectionWrapper({
       baseUrl: BASE_URL,
       backoffBaseMs: 100,
       backoffMaxMs: 300,
-      onStatus: (s) => statuses.push(s.state),
     });
+    runtime.subscribeStatus((s) => statuses.push(s.state));
     const desc = await runtime.connect();
     expect(desc.cwd).toBeTruthy();
     expect(desc.provider).toBeTruthy();
@@ -39,7 +39,7 @@ describe.runIf(live)('HarnessRuntime @live', () => {
   });
 
   it('HTTP unary:session.list 可读', async () => {
-    const runtime = new HarnessRuntime({ baseUrl: BASE_URL, backoffBaseMs: 100, backoffMaxMs: 300 });
+    const runtime = new ConnectionWrapper({ baseUrl: BASE_URL, backoffBaseMs: 100, backoffMaxMs: 300 });
     await runtime.connect();
     const result = await runtime.request<{ items: unknown[] }>('session.list', {});
     expect(result.ok).toBe(true);

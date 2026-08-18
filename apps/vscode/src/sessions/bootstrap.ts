@@ -6,7 +6,35 @@
  */
 
 import { DshWebApiClient } from '../api/dsh-web-api-client.js';
-import { ensureWorkspace, listSessions } from '../rpc.js';
+/** 会话列表项(来自 session.list 的 items 投影) */
+interface SessionItem {
+  sessionId: string;
+  updatedAt: number;
+  running: boolean;
+  blank: boolean;
+  cwd: string;
+  agentPreset: string;
+}
+
+/** 拉取会话列表;失败抛错 */
+async function listSessions(api: DshWebApiClient): Promise<SessionItem[]> {
+  const resp = await api.callMethod<{ items?: SessionItem[] }>('session.list', {});
+  const items = resp.result.value?.items;
+  if (!Array.isArray(items)) throw new Error('session.list: 响应缺少 items');
+  return items;
+}
+
+/** 确保 workspace 存在;失败返回 undefined */
+async function ensureWorkspace(api: DshWebApiClient, path: string): Promise<string | undefined> {
+  const list = await api.callMethod<{ items?: Array<{ workspaceId: string; path: string }> }>('workspace.list', {});
+  const items = list.result.value?.items;
+  if (Array.isArray(items)) {
+    const hit = items.find((w) => w.path === path);
+    if (hit) return hit.workspaceId;
+  }
+  const created = await api.callMethod<{ workspaceId?: string }>('workspace.create', { path });
+  return created.result.value?.workspaceId;
+}
 
 /**
  * 确保文件夹有会话:workspace.create(幂等)→ 复用空白会话 → 新建。
