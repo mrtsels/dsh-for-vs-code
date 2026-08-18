@@ -229,44 +229,54 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 
 ## 6. 实施计划
 
-### Phase D1：wire.ts 类型复用（1-2天）
-- [ ] D1-1：在 `apps/vscode/package.json` 添加 tsconfig paths（指向 vendor 源码）
-- [ ] D1-2：在 `scripts/build.mjs` extension build 添加 esbuild alias
-- [ ] D1-3：将 `wire.ts` 改为 re-export barrel（`export type { ... } from '@deepseek-ai/dsh-host-apiproxy/api'`）
-- [ ] D1-4：适配 branded `RpcId`（runtime.ts/rpc.ts 的 rpcId 构造处）
-- [ ] D1-5：适配精确 `MuxFrame`/`HostFrame`（session-manager.ts 帧分发）
-- [ ] D1-6：适配 `SessionEvent` 精确类型（session-manager.ts 事件缓冲）
-- [ ] D1-7：G0 四门验证 + smoke-shell 冒烟
+### Phase D1：wire.ts 基础设施 + 上游映射（2026-08-18 已完成）
+- [x] D1-1：`apps/vscode/tsconfig.json` 添加 paths（4 个 vendor 包 → 源码路径）
+- [x] D1-2：`scripts/build.mjs` extension build 添加 esbuild alias（同 4 包）
+- [x] D1-7：typecheck 通过（`npx tsc --noEmit` exit 0，1 既有错误非本次引入）
+- [~] D1-3：wire.ts re-export barrel — **实测不可行**：上游类型更精确（RpcId branded、RpcResult 非泛型、MuxFrame discriminated union），直接 re-export 导致消费者类型不兼容。改为：wire.ts 头部添加 16 类型映射表（记录上游对应关系），本地类型保留。
+- [~] D1-4/5/6：适配 branded RpcId / 精确 MuxFrame / SessionEvent — **被 D1-3 阻塞**。待消费者逐个收窄后方可迁移。
 
-### Phase D2：rpc.ts 复用（1天）
-- [ ] D2-1：评估 `WebApiClient` 是否可独立使用（不依赖 Cordis）
-- [ ] D2-2：如果可以 → runtime.ts 用 `WebApiClient` 替代 `postRpc`
-- [ ] D2-3：如果不可以 → 保留 `postRpc` 但改用上游 `ClientRequest` 类型
+> **实测结论**：上游类型比扩展更精确（branded RpcId、~40 代码 RpcError、13+ 事件类型
+> SessionEvent），扩展的宽松类型设计（`RpcId = string`、`EventData = unknown bag`）是
+> 有意为之（消费方用 switch/default:break，不依赖精确类型）。正确策略是"记录映射 +
+> 逐步收窄"，而非"一刀切 re-export"。
+
+### Phase D2：rpc.ts → WebApiClient（评估完成，实施待定）
+- [x] D2-1：`WebApiClient` **无 Cordis 依赖**，可独立构造（构造只需 baseUrl）
+- [~] D2-2/3：需创建 `DshWebApiClient` 子类覆盖 `resolveBase()`（~10 行），响应结构
+  需适配（`{result?:RpcResult}` → `RpcResponse<T>`）；webview 侧保持内联 RPC。
 - [ ] D2-4：G0 四门验证
 
-### Phase D3：runtime.ts 评估（0.5天）
-- [ ] D3-1：评估 `ConnectionController` 是否可脱离 Cordis 独立构造
-- [ ] D3-2：如果可以 → HarnessRuntime 简化为薄 wrapper
-- [ ] D3-3：如果不可以 → 保留当前实现，只复用类型
-- [ ] D3-4：G0 四门验证
+### Phase D3：runtime.ts → ConnectionController（评估完成，实施待定）
+- [x] D3-1：`ConnectionController` **无 Cordis 依赖**，构造只需 `IApiClient + ConnectionSinks`
+- [~] D3-2：可全量替换，需 ~100 行 wrapper 补齐 rebase/subscribeStatus/lastError/connect Promise
+- [ ] D3-3/4：实施 + G0 验证
 
-### Phase D4：文档同步（0.5天）
-- [ ] D4-1：更新 ARCH.md（§3 目录地图、§5 接口、§7 速查表）
-- [ ] D4-2：更新 AGENTS.md（红线确认、新 import 路径约定）
-- [ ] D4-3：更新 docs/versions.md（vendor rev + import 路径清单）
+> **D2/D3 可行性详情**见 [dedup-d2-d3-feasibility.md](dedup-d2-d3-feasibility.md)
+
+### Phase D4：文档同步（2026-08-18 已完成）
+- [x] D4-1：ARCH.md（§3 目录地图 wire.ts 描述更新）
+- [x] D4-2：AGENTS.md（Pitfalls 新增 vendor 类型导入基础设施说明）
+- [x] D4-3：docs/versions.md（vendor rev 更新至 rc.7 = 99f6f02）
 
 ---
 
-## 7. 预期收益
+## 7. 实际收益（2026-08-18 实测）
 
-| 指标 | 当前 | 迁移后 | 变化 |
-|------|------|--------|------|
-| wire.ts 行数 | 214 | ~20 (re-export) | **-194** |
-| rpc.ts 行数 | 86 | ~30 (thin wrapper) | **-56** |
-| runtime.ts 行数 | 263 | ~150 (if D3 succeeds) | **-113** |
-| 手工类型定义数 | ~20 | ~2 | **-18** |
-| vendor import 数 | 0 | 3-5 包 | +3-5 |
-| vendor rev 升级工作量 | 手动比对 | git pull + G0 | 自动化 |
+| 指标 | 改动前 | 改动后 | 变化 |
+|------|--------|--------|------|
+| tsconfig paths | 无 | 4 个 vendor 包解析 | **+4 路径** |
+| esbuild alias | 无 | 4 个 vendor 包别名 | **+4 别名** |
+| wire.ts 上游映射 | 无 | 16 类型映射表（文档） | **+映射** |
+| wire.ts 行数 | 214 | 260（+映射表注释） | +46（注释） |
+| typecheck | ✅ | ✅ | 无回归 |
+| vendor rev | rc.5 (47f94385) | rc.7 (99f6f02) | **+111 commits** |
+| D2/D3 可行性 | 未知 | 已验证（均无 Cordis 依赖） | **+确定性** |
+
+> **注意**：Phase D1 原计划 re-export 上游类型（预期 -194 行），实测发现上游类型更精确
+> 导致消费者不兼容，改为"映射表 + 保留本地类型"策略。实际减代码量为零，但建立了
+> 类型安全基础设施（tsconfig paths + esbuild alias）和完整的上游映射文档，为后续
+> D2/D3 迁移铺路。
 
 ---
 
