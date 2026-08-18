@@ -14,6 +14,7 @@ import { ChatPanel } from './webview/chat-panel.js';
 import { readAgentPresetRoster, registerSettingsBridge } from './settings-bridge.js';
 import { ensureFolderSession } from './sessions/bootstrap.js';
 import { DshWebApiClient } from './api/dsh-web-api-client.js';
+import { getPresetDisplayName } from './preset/presentation.js';
 import { SnapshotWatcher } from './vscode/workspace.js';
 import { WorkspaceChangeDecorationProvider } from './vscode/workspace-decoration.js';
 import { HttpProxy } from './vscode/proxy.js';
@@ -750,7 +751,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const currentVal = vscode.workspace.getConfiguration('deepseekHarness').get<string>('agentPreset', '');
         const pick = await vscode.window.showQuickPick(
           ['', ...roster].map((id) => ({
-            label: id === '' ? '跟随实例默认(不写回)' : id,
+            label: id === '' ? '跟随实例默认(不写回)' : getPresetDisplayName(id),
             description: id === currentVal ? '当前' : undefined,
             id,
           })),
