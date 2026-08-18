@@ -182,6 +182,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   };
   runtime.onHostFrame = (frame) => {
+    controller.handleHostFrame(frame);  // M3: agent-error → error state
     if (frame.type === 'host/session-added' || frame.type === 'host/session-removed') {
       void refreshSessionList();
     }

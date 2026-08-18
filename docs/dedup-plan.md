@@ -275,17 +275,21 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 >
 > tsconfig 新增 allowImportingTsExtensions（上游 .ts 扩展名导入需要）。
 
-### Phase M3：MuxFrame / HostFrame 拆分
-- [ ] M3-1：wire.ts 定义 type IncomingFrame = MuxFrame | HostFrame（从 upstream re-export）
-- [ ] M3-2：runtime.ts 的 onMuxFrame / onHostFrame 回调参数类型改为 upstream exact type
-- [ ] M3-3：session-manager.ts 的 handleMuxFrame 拆为 handleMuxFrame(MuxFrame) + handleHostFrame(HostFrame)
-- [ ] M3-4：controller.ts switch 补齐 HostFrame 变体（host/agent-error 等从 MuxFrame 移到 HostFrame 处理）
-- [ ] M3-5：extension.ts 中 MuxFrame import 更新
-- [ ] M3-6：G0 typecheck 验证
+### Phase M3：MuxFrame / HostFrame 类型收紧（ChatGPT 方案确认）
+- [ ] M3-1：wire.ts re-export 上游 MuxFrame + HostFrame（不再本地定义宽松 union）
+- [ ] M3-2：controller.ts 新增 handleHostFrame(HostFrame) 方法
+- [ ] M3-3：controller.ts handleMuxFrame 中 `frame.event.type === 'host/agent-error'` 移到 handleHostFrame
+- [ ] M3-4：extension.ts onHostFrame 回调增加 controller.handleHostFrame(frame) 调用
+- [ ] M3-5：适配 branded SessionId 消费点（frame.sessionId === string 比较）
+- [ ] M3-6：runtime.ts onMuxFrame/onHostFrame 参数类型改为 upstream exact type
+- [ ] M3-7：G0 typecheck 验证
 
-> M3 策略：先拆 union boundary，再逐个迁移。host/agent-error 不是 MuxFrame 的变体，
-> 是 HostFrame 的变体——这是 architecture 问题，不是 TS 太严格。拆开后每个 handler
-> 只处理自己的 union，switch 自然完整。
+> M3 决策（ChatGPT 确认）：
+> - host/agent-error 是 HostFrame 变体，不是 SessionEvent type → 移到 handleHostFrame（选 B）
+> - stream/error 同时在两个 union 中 → 合法，TypeScript 会分别检查，无需 as 断言
+> - IncomingFrame 类型 M3 暂不引入（避免重新混 union，与架构拆分方向相反）
+> - SessionId branded 优先在应用层保持 branded，仅 UI/storage 边界转 string
+> - 这次 migration 的核心价值是暴露原来被宽松类型隐藏的逻辑错误（host/agent-error 就是一例）
 
 ### Phase M4：SessionEvent exact union 迁移
 - [ ] M4-1：wire.ts re-export upstream SessionEvent、SessionEventMap、TurnEndReason

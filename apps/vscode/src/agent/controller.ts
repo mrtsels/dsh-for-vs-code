@@ -5,7 +5,7 @@
  */
 import type { HarnessRuntime } from './runtime.js';
 import type { SessionManager } from './session-manager.js';
-import type { MuxFrame } from './wire.js';
+import type { MuxFrame, HostFrame } from './wire.js';
 
 export type ControllerState = 'idle' | 'running' | 'error' | 'disconnected';
 
@@ -49,7 +49,13 @@ export class AgentController {
     if (frame.type !== 'session/event' || frame.sessionId !== this.activeSessionId || !frame.event) return;
     if (frame.event.type === 'turn/start') this.setState('running');
     else if (frame.event.type === 'turn/end') this.setState('idle');
-    else if (frame.event.type === 'host/agent-error') this.setState('error');
+  }
+
+  /** 处理 host 帧:agent-error 时进入 error state (M3: host/agent-error 是 HostFrame 变体,非 SessionEvent) */
+  handleHostFrame(frame: HostFrame): void {
+    if (frame.type === 'host/agent-error' && frame.sessionId === this.activeSessionId) {
+      this.setState('error');
+    }
   }
 
   async ask(sessionId: string, text: string): Promise<void> {
