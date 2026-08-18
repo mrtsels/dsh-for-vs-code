@@ -64,7 +64,7 @@ dsh-for-vs-code/
 │   │   │
 │   │   ├── agent/                        # Layer 1-2: Agent Bridge
 │   │   │   ├── runtime.ts                #   薄桥:HTTP/WS 传输,零状态缓存
-│   │   │   ├── wire.ts                   #   协议模型:四象限 RPC + 帧 union
+│   │   │   ├── wire.ts                   #   协议模型:四象限 RPC + 帧 union(含上游映射表)
 │   │   │   ├── session-manager.ts        #   会话列表 + append-only 事件缓冲
 │   │   │   ├── controller.ts             #   状态机:idle/running/error/disconnected
 │   │   │   ├── context.ts                #   模型上下文格式化(纯函数)

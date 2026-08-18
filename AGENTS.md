@@ -54,6 +54,7 @@ DeepSeek Harness（`dsh`）的 VS Code 客户端：复用上游 Agent Runtime / 
 - **resolveBase 适配缝**（build-web-shell.mjs）：上游 connection 构建产物的 base 解析三元表达式被断言式替换为 `__DSH_WEB_URL__` 优先；改 vendor rev 后若构建报「适配缝失配」，说明产物文本已变，先看产物再更新缝（验证对象是 `plugins/@deepseek-ai/dsh-client-connection/client.js`，不是源码）
 - **裁剪图参考**（`scripts/ref-graph-rc6.json`）：裁剪模式与参考集做精确断言；上游新增/改名 client 包会触发失败——有意变更则同步更新参考
 - **mux 存在二进制帧**：上游客户端（rc.5/rc.6 一致）丢弃非文本帧，属已知行为非回归；UI 依赖的帧均为文本
+- **vendor 类型导入基础设施**（2026-08-18）：tsconfig paths + esbuild alias 配置了 4 个 vendor 包的解析路径（dsh-host-apiproxy/api、dsh-client-connection/client、dsh-session/types、dsh-session），扩展侧代码可通过标准 import 引入上游类型。**当前 wire.ts 保留本地类型定义**（上游更精确：branded RpcId、非泛型 RpcResult、discriminated MuxFrame），仅记录映射关系；直接 re-export 会导致消费者类型不兼容。迁移策略见 docs/dedup-plan.md
 - `/plugins/events`（HMR dev SSE）在无 dev server 时 404，无害
 - 上游 rc.5 源码构建产物与 rc.6 npm 产物字节级一致（实测），UI 侧协议漂移风险低；升级仍须全量回归
 
