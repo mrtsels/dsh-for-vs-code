@@ -175,9 +175,9 @@ VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第�
 
 ### Phase 6:定制适配(侧边栏形态)
 
-- [x] P6-1 定制 boot 图:插件子集(39→28,与 ref-graph-rc6.json 断言一致;含 inject 边裁剪;
-      directory-picker-browse/native 一并排除 —— 全量图实测有 directoryFlow 双注册冲突,
-      browse 为 rc.5 源码多出包(rc.6 服务端图没有))
+- [x] P6-1 定制 boot 图:插件子集(39→31,与 ref-graph-rc6.json 断言一致;含 inject 边裁剪;
+      directory-picker-browse 排除(in-app 浏览器不需要),directory-picker-native 保留
+      (renderless occupant → host.pickDirectory → VS Code showOpenDialog))
 - [x] P6-2 侧边栏适配:ui-layout 窄布局原生可用(280px 侧栏 + details 折叠);shell.css 静态样式
       (html/body/#root + [class$=_frame/_sidebarCol/_centerCol/_detailsCol] 透明)替代
       transparentPageChrome DOM 启发式,冒烟断言 body/frame 透明通过

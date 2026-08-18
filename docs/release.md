@@ -5,8 +5,9 @@
 - **UI 改为上游原生组件源码构建**(Route A):vendor/deepseek-harness @ `47f94385`(0.1.0-rc.5)只读 submodule;
   `build-web-shell.mjs` 装配 `dist/web/dsh-shell`(index.html + boot 图 + 28 插件 bundle + shell.css),
   替代原 fetch+boot(已退役)。实测 rc.5 源码构建产物与 rc.6 npm 产物字节级一致。
-- **定制 boot 图**:39→28 插件裁剪(设置/计划/交付物/工作流/agent-preset/权限预设/目录选择由 VS Code 原生层接管),
+- **定制 boot 图**:39→31 插件裁剪(设置/计划/交付物/工作流/agent-preset/权限预设/目录浏览器由 VS Code 原生层接管),
   与 `ref-graph-rc6.json` 精确断言;inject 边裁剪防 loader 等死。
+  目录选择保留 `ui-directory-picker-native`(renderless occupant),排除 `ui-directory-picker-browse`(in-app 浏览器)。
 - **侧边栏融合**:静态 shell.css 透明(html/body/#root + 布局 chrome),替代旧 DOM 启发式。
 - **代理重定向**:`proxy.setTarget`(切换实例地址端口不变)。
 - **清理**:自研聊天 UI(web/* 9 文件 + panel.ts)删除,仅保留 changes 审查面板;fetch-dsh-ui.mjs 退役。
