@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { SessionManager } from '../src/agent/session-manager.js';
 import type { HarnessRuntime } from '../src/agent/runtime.js';
-import type { SessionEvent } from '../src/agent/wire.js';
-import { SessionId } from '@deepseek-ai/dsh-session/types';
-/** 测试 helper: string → branded SessionId */
-const sid = (s: string) => SessionId(s);
+import type { MuxFrame, SessionEvent } from '../src/agent/wire.js';
+/** 测试 helper: string → branded SessionId (cast for test) */
+const sid = (s: string) => s as any;
 
 /** 协议边界窄化:测试用的假 runtime,只实现 request */
 const mockRuntime = {
@@ -28,24 +27,24 @@ const ev = (partial: Partial<SessionEvent> & { type: string }): SessionEvent => 
 describe('SessionManager 事件缓冲', () => {
   it('mux 帧按序追加,不丢不重', () => {
     const sm = new SessionManager(mockRuntime);
-    sm.handleMuxFrame({ type: 'session/subscribed', sessionId: sid('s1'), lastSeq: 0 });
-    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/start', seq: 1 }) });
-    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'user/message', seq: 2 }) });
+    sm.handleMuxFrame({ type: 'session/subscribed', sessionId: sid('s1'), lastSeq: 0 } as unknown as MuxFrame);
+    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/start', seq: 1 }) } as unknown as MuxFrame);
+    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'user/message', seq: 2 }) } as unknown as MuxFrame);
     const snapshot = sm.snapshot('s1');
     expect(snapshot.map((e) => e.seq)).toEqual([1, 2]);
   });
 
   it('running 由 turn/start 置 true、turn/end 置 false', () => {
     const sm = new SessionManager(mockRuntime);
-    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/start', seq: 1, data: { turn: 1 } }) });
+    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/start', seq: 1, data: { turn: 1 } }) } as unknown as MuxFrame);
     expect(sm.isRunning('s1')).toBe(true);
-    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/end', seq: 2, data: { turn: 1 } }) });
+    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/end', seq: 2, data: { turn: 1 } }) } as unknown as MuxFrame);
     expect(sm.isRunning('s1')).toBe(false);
   });
 
   it('title 从 session/title 事件捕获', () => {
     const sm = new SessionManager(mockRuntime);
-    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'session/title', seq: 1, data: { title: 'Hello' } }) });
+    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'session/title', seq: 1, data: { title: 'Hello' } }) } as unknown as MuxFrame);
     expect(sm.title('s1')).toBe('Hello');
   });
 
@@ -58,7 +57,7 @@ describe('SessionManager 事件缓冲', () => {
   it('畸形 session/event 帧(缺 event)被丢弃不外抛', () => {
     const sm = new SessionManager(mockRuntime);
     expect(() =>
-      sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: undefined as unknown as SessionEvent }),
+      sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: undefined as any } as any),
     ).not.toThrow();
     expect(sm.snapshot('s1')).toEqual([]);
   });
@@ -68,7 +67,7 @@ describe('SessionManager 事件缓冲', () => {
     const jobs = [
       { id: 'bash-1', kind: 'bash', label: 'pnpm test', status: 'running' as const, startedAt: 1 },
     ];
-    sm.handleMuxFrame({ type: 'session/jobs', sessionId: sid('s1'), jobs });
+    sm.handleMuxFrame({ type: 'session/jobs', sessionId: sid('s1'), jobs } as unknown as MuxFrame);
     expect(sm.jobs('s1')).toEqual(jobs);
   });
 
@@ -80,13 +79,13 @@ describe('SessionManager 事件缓冲', () => {
       createdAt: 1,
       updatedAt: 1,
     };
-    sm.handleMuxFrame({ type: 'session/projection', sessionId: sid('s1'), key: 'goal', value: goal, seq: 10 });
+    sm.handleMuxFrame({ type: 'session/projection', sessionId: sid('s1'), key: 'goal', value: goal, seq: 10 } as unknown as MuxFrame);
     expect(sm.goal('s1')?.goal.objective).toBe('目标A');
     // 旧 seq 不覆盖
-    sm.handleMuxFrame({ type: 'session/projection', sessionId: sid('s1'), key: 'goal', value: { goal: { id: 'g1', revision: 2, objective: '旧', phase: 'active' } }, seq: 5 });
+    sm.handleMuxFrame({ type: 'session/projection', sessionId: sid('s1'), key: 'goal', value: { goal: { id: 'g1', revision: 2, objective: '旧', phase: 'active' } }, seq: 5 } as unknown as MuxFrame);
     expect(sm.goal('s1')?.goal.revision).toBe(1);
     // 新 seq 覆盖
-    sm.handleMuxFrame({ type: 'session/projection', sessionId: sid('s1'), key: 'goal', value: { goal: { id: 'g1', revision: 2, objective: '目标B', phase: 'paused' } }, seq: 11 });
+    sm.handleMuxFrame({ type: 'session/projection', sessionId: sid('s1'), key: 'goal', value: { goal: { id: 'g1', revision: 2, objective: '目标B', phase: 'paused' } }, seq: 11 } as unknown as MuxFrame);
     expect(sm.goal('s1')?.goal.phase).toBe('paused');
   });
 
@@ -119,7 +118,7 @@ describe('SessionManager 事件缓冲', () => {
   it('onEvents 逐帧回调', () => {
     const received: Array<[string, SessionEvent[]]> = [];
     const sm = new SessionManager(mockRuntime, { onEvents: (sid, events) => received.push([sid, events]) });
-    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/start', seq: 1 }) });
+    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/start', seq: 1 }) } as unknown as MuxFrame);
     expect(received).toHaveLength(1);
     expect(received[0]![0]).toBe('s1');
     expect(received[0]![1]).toHaveLength(1);

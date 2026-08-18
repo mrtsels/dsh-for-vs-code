@@ -4,8 +4,8 @@
  * 迁移策略（D→C）：protocol boundary 类型逐步 re-export 上游，
  * application domain 类型保留本地。见 docs/dedup-plan.md Phase M2-M6。
  *
- * 当前已 re-export 上游：SkillEntry
- * 待迁移（M3-M5）：RpcResult, MuxFrame, HostFrame, SessionEvent, ClientRequest, ServerResponse
+ * 当前已 re-export 上游：SkillEntry, MuxFrame, HostFrame
+ * 本地类型保留：RpcId, RpcError, RpcResult, ClientRequest, ServerResponse, TextPromptPart, PromptPart, ...
  *
  * 以适配扩展的 switch/default:break 消费模式和 webview 跨层传递。
  *
@@ -43,11 +43,12 @@
  *   3. 待全部消费者收窄后，逐个替换为上游类型
  */
 
-// ─── 上游 re-export（Phase M2：无冲突类型） ────────────────────────
+// ─── 上游 re-export ──────────────────────────────────────────────
 
 export type { SkillEntry } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { createRpcId } from './wire-adapters.js'
 export { createRpcId } from './wire-adapters.js'
+
 
 // ─── 本地类型（待 M3-M5 逐步迁移） ────────────────────────────────
 

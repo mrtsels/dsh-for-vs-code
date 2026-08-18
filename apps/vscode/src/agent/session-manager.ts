@@ -123,7 +123,7 @@ export class SessionManager {
     if (!result.ok) return; // 历史不可得时不阻塞 UI(空会话日志也合法)
     const state = this.ensure(sessionId);
     const events = result.value.events.map((e) => e.event).sort((a, b) => a.seq - b.seq);
-    state.events = events;
+    state.events = events as unknown as SessionEvent[];
     if (events.length > 0) state.lastSeq = events[events.length - 1]!.seq;
     // projections 块:goal/title/sessionStats 等权威基线(history 恢复;live 靠 projection 帧增量)
     // P1-B:history 是 asOfSeq 的快照,若 live 帧已带更高 seq 则不覆盖(与 handleMuxFrame 统一 higher-seq-wins)

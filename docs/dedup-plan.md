@@ -291,17 +291,19 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 > - SessionId branded 优先在应用层保持 branded，仅 UI/storage 边界转 string
 > - 这次 migration 的核心价值是暴露原来被宽松类型隐藏的逻辑错误（host/agent-error 就是一例）
 
-### Phase M4：SessionEvent exact union 迁移
-- [ ] M4-1：wire.ts re-export upstream SessionEvent、SessionEventMap、TurnEndReason
-- [ ] M4-2：session-manager.ts 事件消费改用 narrowing（switch (event.type) 后 event.data.turn 等自动推导）
-- [ ] M4-3：bridge.ts 中 SessionEvent import 更新
-- [ ] M4-4：chat-stream.ts 中 SessionEvent import 更新
-- [ ] M4-5：删除旧 EventData loose type
-- [ ] M4-6：G0 typecheck 验证
+### Phase M4：SessionEvent exact union 迁移（ChatGPT 方案确认）
+- [ ] M4-1：wire.ts re-export upstream SessionEvent + SessionEventMap + SessionEventType + TurnEndReason，删除本地 SessionEvent/EventData/Chunk
+- [ ] M4-2：session-manager.ts — 删除 session/title 事件处理（改从 SessionSummary projection 取标题），state.events 改为 upstream SessionEvent[]
+- [ ] M4-3：bridge.ts / chat-stream.ts — SessionEvent import 更新
+- [ ] M4-4：test/session-manager.test.ts — fixture 改为 upstream exact shape（data.reason = {kind:'completed'} 等）
+- [ ] M4-5：G0 typecheck 验证
 
-> M4 策略：这是改动最大的一步。上游 SessionEvent<'turn/end'> 的 data.reason
-> 是 TurnEndReason（discriminated union），不再是 string。消费方通过
-> switch (event.type) 自动 narrowing，无需手动断言。
+> M4 决策（ChatGPT 确认）：
+> - session/title 不是合法 wire event → 标题从 SessionSummary.projections.values.title 获取
+> - TurnEndReason 直接使用 exact type，不 adapter 不 cast
+> - state.events 直接改为 upstream SessionEvent[]，buffer 边界不 normalization
+> - 测试 fixture 改为 upstream exact shape，不给 production 加 compatibility layer
+> - wire.ts 作为 upstream protocol type facade，export 整套会被消费的类型
 
 ### Phase M5：Generic compatibility layer
 - [ ] M5-1：wire-adapters.ts 定义 TypedClientRequest<P> 和 TypedServerResponse<T>
