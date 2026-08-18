@@ -377,4 +377,4 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 
 ## 10. 附录：上游包导出速查
 
-见 [vendor-export-catalog.md](vendor-export-catalog.md)（19 包完整导出目录）。
+见 [vendor-export-catalog.md](tmp/vendor-export-catalog.md)（19 包完整导出目录）。
