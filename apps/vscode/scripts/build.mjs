@@ -28,6 +28,12 @@ const extension = {
   sourcemap: true,
   external: ['vscode'],
   logLevel: 'info',
+  alias: {
+    '@deepseek-ai/dsh-host-apiproxy/api': resolve(app, '../../vendor/deepseek-harness/packages/host/apiproxy/src/api/index.ts'),
+    '@deepseek-ai/dsh-client-connection/client': resolve(app, '../../vendor/deepseek-harness/packages/client/connection/src/client/index.ts'),
+    '@deepseek-ai/dsh-session/types': resolve(app, '../../vendor/deepseek-harness/packages/core/session/src/types.ts'),
+    '@deepseek-ai/dsh-session': resolve(app, '../../vendor/deepseek-harness/packages/core/session/src/index.ts'),
+  },
 };
 
 /** @type {import('esbuild').BuildOptions} */

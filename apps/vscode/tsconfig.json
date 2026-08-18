@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "jsx": "react-jsx",
@@ -14,7 +18,27 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "paths": {
+      "@deepseek-ai/dsh-host-apiproxy/api": [
+        "../../vendor/deepseek-harness/packages/host/apiproxy/src/api/index.ts"
+      ],
+      "@deepseek-ai/dsh-client-connection/client": [
+        "../../vendor/deepseek-harness/packages/client/connection/src/client/index.ts"
+      ],
+      "@deepseek-ai/dsh-session/types": [
+        "../../vendor/deepseek-harness/packages/core/session/src/types.ts"
+      ],
+      "@deepseek-ai/dsh-session": [
+        "../../vendor/deepseek-harness/packages/core/session/src/index.ts"
+      ]
+    }
   },
-  "include": ["src", "web", "test", "scripts", "vitest.config.ts"]
+  "include": [
+    "src",
+    "web",
+    "test",
+    "scripts",
+    "vitest.config.ts"
+  ]
 }
