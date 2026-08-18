@@ -276,13 +276,13 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 > tsconfig 新增 allowImportingTsExtensions（上游 .ts 扩展名导入需要）。
 
 ### Phase M3：MuxFrame / HostFrame 类型收紧（ChatGPT 方案确认）
-- [ ] M3-1：wire.ts re-export 上游 MuxFrame + HostFrame（不再本地定义宽松 union）
+- [x] M3-1：wire.ts re-export 上游 MuxFrame + HostFrame ✅
 - [x] M3-2：controller.ts 新增 handleHostFrame(HostFrame) 方法 ✅
 - [x] M3-3：controller.ts handleMuxFrame 中 `frame.event.type === 'host/agent-error'` 移到 handleHostFrame ✅
 - [x] M3-4：extension.ts onHostFrame 回调增加 controller.handleHostFrame(frame) 调用 ✅
-- [ ] M3-5：适配 branded SessionId 消费点（frame.sessionId === string 比较）
-- [ ] M3-6：runtime.ts onMuxFrame/onHostFrame 参数类型改为 upstream exact type
-- [ ] M3-7：G0 typecheck 验证
+- [x] M3-5：适配 branded SessionId 消费点 ✅（仅测试文件需要，源码安全）
+- [x] M3-6：runtime.ts 参数类型改为 upstream exact type ✅
+- [ ] M3-7：G0 typecheck 验证（剩余 M4 SessionEvent 类型冲突待修）
 
 > M3 决策（ChatGPT 确认）：
 > - host/agent-error 是 HostFrame 变体，不是 SessionEvent type → 移到 handleHostFrame（选 B）
