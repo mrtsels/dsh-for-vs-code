@@ -161,29 +161,8 @@ export interface SessionHistoryResponse {
   projections?: { asOfSeq: number; values: Record<string, unknown> };
 }
 
-/** /api/events.mux 帧 union（events.d.ts 子集；未知类型帧由消费方 default 忽略） */
-export type MuxFrame =
-  | { type: 'session/event'; sessionId: string; event: SessionEvent; view?: unknown }
-  | { type: 'session/subscribed'; sessionId: string; lastSeq: number }
-  | { type: 'session/queue'; sessionId: string; items: unknown[] }
-  | { type: 'session/jobs'; sessionId: string; jobs: unknown[] }
-  | { type: 'session/projection'; sessionId: string; key: string; value: unknown; seq: number }
-  | { type: 'approval/requested'; sessionId: string; approvalId: string; toolName: string; callId?: string; reason?: string }
-  | { type: 'approval/resolved'; sessionId: string; approvalId: string; outcome: string }
-  | { type: 'question/requested'; sessionId: string; questions: unknown[] }
-  | { type: 'question/resolved'; sessionId: string; questionRpcId: string; outcome: string }
-  | { type: 'stream/error'; error: RpcError };
-
-/** /api/events.host 帧 union（子集） */
-export type HostFrame =
-  | { type: 'host/session-added'; sessionId: string; blank: boolean; cwd?: string; agentPreset?: string }
-  | { type: 'host/session-removed'; sessionId: string }
-  | { type: 'host/session-status'; sessionId: string; running: boolean }
-  | { type: 'host/archived-sessions-changed'; archivedSessionIds: string[] }
-  | { type: 'host/agent-error'; sessionId: string; message: string }
-  | { type: 'host/workspace-changed'; workspace: unknown }
-  | { type: 'host/workspace-removed'; workspaceId: string }
-  | { type: 'stream/error'; error: RpcError };
+/** /api/events.mux 帧 union（re-export 上游精确 discriminated union） */
+export type { MuxFrame, HostFrame } from '@deepseek-ai/dsh-host-apiproxy/api'
 
 export interface HostDescription {
   version: string;
