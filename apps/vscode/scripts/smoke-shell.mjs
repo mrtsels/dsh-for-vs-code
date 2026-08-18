@@ -174,9 +174,13 @@ const sessionsLayout = await page.evaluate(() => {
     sessionsRootVisible: sessionsRoot !== null && !sessionsRoot.hidden,
     headerPresent: document.querySelector('.dsh-session-header') !== null,
     logoPresent: document.querySelector('.dsh-session-logo') !== null,
-    backInHeader: (() => {
+    backInHeaderGone: (() => {
       const header = document.querySelector('.dsh-session-header');
-      return header !== null && header.querySelector('.dsh-session-back') !== null;
+      return header !== null && header.querySelector('.dsh-session-back') === null;
+    })(),
+    newInFooter: (() => {
+      const footer = document.querySelector('.dsh-session-footer');
+      return footer !== null && footer.querySelector('.dsh-session-new') !== null;
     })(),
     newBtnPresent: document.querySelector('.dsh-session-new') !== null,
     rows: document.querySelectorAll('.dsh-session-row').length,
@@ -372,7 +376,8 @@ if (sessionsLayout.rootDisplay !== 'none') failures.push(`会话页未隐藏上�
 if (!sessionsLayout.sessionsRootVisible) failures.push('会话页 #dsh-sessions-root 不可见');
 if (!sessionsLayout.headerPresent) failures.push('会话页缺少 header');
 if (!sessionsLayout.logoPresent) failures.push('会话页 logo(wordmark)丢失(用户要求保留 logo)');
-if (!sessionsLayout.backInHeader) failures.push('会话页返回按钮不在 header 内(用户要求参与布局,非 fixed 悬浮)');
+if (!sessionsLayout.backInHeaderGone) failures.push('会话页 header 仍含返回按钮(2026-08 用户要求去掉左上角返回)');
+if (!sessionsLayout.newInFooter) failures.push('会话页新建按钮不在底部独立一行(dsh-session-footer)');
 if (!sessionsLayout.newBtnPresent) failures.push('会话页缺少新建会话按钮');
 if (sessionsLayout.rows < 1) failures.push(`会话页无会话行(rows=${sessionsLayout.rows})`);
 if (sessionsLayout.backButtons !== 0) failures.push(`会话页残留对话模式注入的返回按钮(${sessionsLayout.backButtons})`);

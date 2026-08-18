@@ -124,14 +124,16 @@ function patchSetLocaleBridge(clientJsPath) {
   writeFileSync(clientJsPath, body);
 }
 
-/** 裁剪:排除纯叶子 UI 插件(设置/计划/交付物/工作流/agent-preset/权限预设/目录选择),
- * 由 VS Code 原生 UI 接管;会话区+输入面保留。短 id(去掉 @deepseek-ai/ 前缀)。 */
+/** 裁剪:排除纯叶子 UI 插件(设置/计划/交付物/工作流/权限预设/目录选择),
+ * 由 VS Code 原生 UI 接管;会话区+输入面保留。短 id(去掉 @deepseek-ai/ 前缀)。
+ * 注:dsh-client-ui-agent-preset 于 2026-08 恢复 —— 上游原生提供「会话页 header
+ * title 右侧的 Agent Mode 标签(AgentPresetLabel)」与「新会话屏的模式选择下拉
+ * (AgentPresetSeat)」,用户要求使用上游原生 UI,不再自绘。 */
 const EXCLUDE_PLUGINS = new Set([
   // ui-plan 于 2026-08-18 恢复:对话面板需要 Mode(计划)控制;
   // Todo 面板属 ui-conversation 自带,不依赖 ui-plan
   'dsh-client-ui-deliverables',
   'dsh-client-ui-workflow-run',
-  'dsh-client-ui-agent-preset',
   'dsh-client-ui-permission-presets',
   'dsh-client-ui-settings-general',
   'dsh-client-ui-settings-models',
@@ -283,7 +285,10 @@ body, body[data-ds-dark-theme] {
 
 /* ---- 会话管理页(独立单栏页面,扩展自有 React 视图,见 web/SessionView.tsx)。
        不再是"拉伸侧边栏":不撑宽 #root、不依赖 SIDEBAR_AUTO_COLLAPSE、无展开/折叠。
-       页面宽度 100%,任意 webview 宽度(320~1400px)不横向溢出。 ---- */
+       页面宽度 100%,任意 webview 宽度(320~1400px)不横向溢出。
+       2026-08 用户要求:页头去掉左上角返回键(仅居中 wordmark);新建会话按钮移到
+       底部独立一行(dsh-session-footer),配色为 白底+强调色边+强调色字(未激活)/
+       强调色底+白字(激活)。 ---- */
 #dsh-sessions-root { width: 100%; height: 100vh; }
 #dsh-sessions-root[hidden] { display: none !important; }
 .dsh-session-page {
@@ -291,26 +296,34 @@ body, body[data-ds-dark-theme] {
   width: 100%; height: 100%; min-width: 0; max-width: 100%;
   box-sizing: border-box; overflow-x: hidden;
 }
+/* 页头:仅居中品牌 wordmark(无返回键,2026-08 用户要求去掉左上角返回) */
 .dsh-session-header {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; flex: none;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 12px; flex: none;
   border-bottom: 1px solid var(--dsw-alias-border-l1, var(--dsh-host-border));
 }
-.dsh-session-back {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; flex: none; border-radius: 6px;
-  border: none; background: transparent; color: var(--dsh-host-fg);
-  cursor: pointer; padding: 0;
+.dsh-session-logo { color: var(--dsh-host-fg); flex: none; display: block; }
+/* 底部独立一行(2026-08 用户要求:新建对话按钮从右上角移到下方单独一行)。
+   配色:未激活 = 白底 + 强调色边 + 强调色字;激活(hover/按下)= 强调色底 + 白字 */
+.dsh-session-footer {
+  display: flex; align-items: center; justify-content: center;
+  padding: 10px 12px; flex: none;
+  border-top: 1px solid var(--dsw-alias-border-l1, var(--dsh-host-border));
 }
-.dsh-session-back:hover { background: var(--dsh-host-hover); }
-.dsh-session-logo { color: var(--dsh-host-fg); flex: none; }
 .dsh-session-new {
-  display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
-  height: 28px; padding: 0 10px; border-radius: 6px; flex: none;
-  border: none; background: var(--dsh-host-button-bg); color: var(--dsh-host-button-fg);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 30px; padding: 0 18px; border-radius: 6px; flex: none;
+  border: 1px solid var(--dsh-host-accent);
+  background: #ffffff;
+  color: var(--dsh-host-accent);
   font-size: 12px; line-height: 1; cursor: pointer; white-space: nowrap;
 }
-.dsh-session-new:hover { background: var(--dsh-host-button-hover); }
+.dsh-session-new:hover,
+.dsh-session-new:active {
+  background: var(--dsh-host-accent);
+  color: #ffffff;
+  border-color: var(--dsh-host-accent);
+}
 .dsh-session-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 8px 16px; }
 /* ---- workspace 分组 + 会话行(2026-08-20 P1/P2:分组/运行状态/归档折叠;
         行结构与上游 ui-workspace Rows 对齐:状态点槽 + 标题 + 元信息) ---- */
@@ -553,8 +566,8 @@ const shortId = (id) => id.replace('@deepseek-ai/', '');
  * 3. 宿主类型:__DSH_HOST__(sidebar|panel)→ body[data-dsh-host](shell.css 主题变量切换);
  * 4. 视图:chat(对话)| sessions(独立会话管理页,web/SessionView.tsx React 视图)。
  *    对话模式:title 行左侧返回按钮(空会话 hero 用悬浮兜底);点击进入 sessions ——
- *    隐藏 #root、显示 #dsh-sessions-root(扩展自有页面,非侧边栏拉伸);会话页 header
- *    自带返回(经 __dshBridge.setView 切回)。视图偏好持久化(dsh.ui.view);
+ *    隐藏 #root、显示 #dsh-sessions-root(扩展自有页面,非侧边栏拉伸);会话页无返回键
+ *    (2026-08 用户要求去掉,切回对话靠点击会话行打开跳转)。视图偏好持久化(dsh.ui.view);
  * 5. 会话跳转桥:webview 内打开会话(React 页写 localStorage + 回传 switch-session:applied)
  *    → chat-panel 重注入 html 完成重载;扩展侧 dsh:switch-session / dsh:bootstrap-session
  *    消息 → 写 localStorage → 回 post 'switch-session:applied'(同一路径)。
@@ -646,8 +659,9 @@ const BRIDGE_JS = `(() => {
     try { localStorage.setItem(VIEW_KEY, view); } catch (err) {}
     ensureBackButton();
   };
-  // 会话管理页 header 自带返回按钮(React 视图),bridge 只负责对话模式按钮:
-  // 插入 session title 行左侧(与面包屑同行对齐)。React 重渲染可能清除注入节点 →
+  // 会话管理页无返回按钮(2026-08 用户要求去掉;切回对话靠打开会话行),bridge
+  // 只负责对话模式按钮:插入 session title 行左侧(与面包屑同行对齐)。
+  // React 重渲染可能清除注入节点 →
   // rAF 级重插 + document capture 事件委托(按钮被移除瞬间点击仍能命中)。
   // 空会话 hero 无 title 行 → fixed 悬浮兜底。
   const ensureBackButton = () => {

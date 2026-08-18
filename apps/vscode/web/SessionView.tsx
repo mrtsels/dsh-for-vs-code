@@ -13,7 +13,11 @@
  *   - 新建:header 的 + 按钮 → dsh:new-session(扩展按 VS Code 当前目录建会话并接管;
  *     2026-08-20 修:bridge 的 bootstrap 处理同步把 dsh.ui.view 重置为 chat,否则从本页
  *     新建后重载仍回本页);
- *   - 返回:__dshBridge.setView('chat')(bridge 控制 #root 与 #dsh-sessions-root 显隐)。
+ *   - 页头仅居中品牌 wordmark,无返回键(2026-08 用户要求:去掉左上角返回);切回对话
+ *     靠点击会话行(打开即跳转),视图切换由 bridge 控制 #root 与 #dsh-sessions-root 显隐。
+ *   - Agent Mode:由上游原生 UI 提供(ui-agent-preset 插件):对话页 header title 右侧的
+ *     AgentPresetLabel + 新会话屏 hero 的 AgentPresetSeat 模式选择;本页不重复自绘
+ *     (2026-08 用户要求:使用 dsh 上游原生 UI)。
  *
  * 2026-08-20 P1+P2(用户反馈:官方外观 / 点击失效 / 分组+状态+归档折叠):
  *   - 分组:workspace.list.sessionIds 反向索引分组;无归属进"未分组";archivedSessionIds
@@ -87,13 +91,6 @@ const ui = (): 'zh' | 'en' => {
 const str = (zh: string, en: string): string => (ui() === 'zh' ? zh : en);
 
 /* ---- 空心(outline)图标:不用实心/Unicode 符号 ---- */
-const ArrowLeftIcon = (): React.JSX.Element => (
-  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor"
-    strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M10 3 5 8l5 5" />
-  </svg>
-);
-
 const PlusIcon = (): React.JSX.Element => (
   <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor"
     strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
@@ -149,8 +146,8 @@ const ArchiveIcon = (): React.JSX.Element => (
 
 const BrandWordmark = (): React.JSX.Element => (
   <svg
-    width={145.6}
-    height={19.2}
+    width={189.28}
+    height={24.96}
     viewBox="0 0 182 24"
     fill="none"
     className="dsh-session-logo"
@@ -451,10 +448,6 @@ const openSession = (sessionId: string): void => {
   postToHost({ type: 'switch-session:applied', sessionId });
 };
 
-const backToChat = (): void => {
-  window.__dshBridge?.setView('chat');
-};
-
 /** 当前会话(高亮):dsh.sessions.current(与上游恢复键同源)。
  * 只在挂载时读一次:打开会话后整页重载,本页不跨会话存活。 */
 function useCurrentSessionId(): string | undefined {
@@ -471,24 +464,25 @@ function useCurrentSessionId(): string | undefined {
   return id;
 }
 
-function SessionPageHeader({ onBack, onNew }: { onBack: () => void; onNew: () => void }): React.JSX.Element {
+/** 页头:仅居中品牌 wordmark(无返回键,2026-08 用户要求)。 */
+function SessionPageHeader(): React.JSX.Element {
   return (
     <header className="dsh-session-header">
-      <button
-        type="button"
-        className="dsh-session-back"
-        onClick={onBack}
-        aria-label={str('返回', 'Back')}
-        title={str('返回对话', 'Back to chat')}
-      >
-        <ArrowLeftIcon />
-      </button>
       <BrandWordmark />
+    </header>
+  );
+}
+
+/** 底部独立一行:新建会话按钮。配色:未激活 = 白底 + 强调色边 + 强调色字;
+ * 激活(hover/按下)= 强调色底 + 白字(用户要求)。 */
+function SessionNewRow({ onNew }: { onNew: () => void }): React.JSX.Element {
+  return (
+    <footer className="dsh-session-footer">
       <button type="button" className="dsh-session-new" onClick={onNew}>
         <PlusIcon />
         <span>{str('新建会话', 'New session')}</span>
       </button>
-    </header>
+    </footer>
   );
 }
 
@@ -766,7 +760,7 @@ export function SessionManagementView(): React.JSX.Element {
 
   return (
     <div className="dsh-session-page">
-      <SessionPageHeader onBack={backToChat} onNew={() => postToHost({ type: 'dsh:new-session' })} />
+      <SessionPageHeader />
       {actionError !== null && <div className="dsh-session-error-banner">{actionError}</div>}
       <main className="dsh-session-body">
         {loading ? (
@@ -810,6 +804,7 @@ export function SessionManagementView(): React.JSX.Element {
           </div>
         )}
       </main>
+      <SessionNewRow onNew={() => postToHost({ type: 'dsh:new-session' })} />
       {menuFor !== null && (
         <SessionMenu x={menuFor.x} y={menuFor.y} onAction={onMenuAction} onClose={() => setMenuFor(null)} />
       )}
