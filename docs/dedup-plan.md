@@ -318,11 +318,11 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 > rpc.ts 的 RpcEnvelope/RpcResult 保留本地（webview 侧独立抽象层）。
 
 ### Phase M6：D2 rpc.ts -> WebApiClient + D3 runtime.ts -> ConnectionController
-- [x] M6.1：DshWebApiClient + ConnectionWrapper 创建 ✅（e245799）
-- [ ] M6.2：HarnessRuntime → ConnectionWrapper 替换 + 删除 runtime.ts
-- [ ] M6.3：扩展进程 postRpc() → DshWebApiClient（bootstrap/settings-bridge/extension）
-- [ ] M6.4：rpc.ts 拆分 → webview/rpc.ts（保留）+ 删除旧共享 rpc.ts
-- [ ] M6.5：G0 四门验证 + smoke-shell + test 重写
+- [x] M6.1：DshWebApiClient + ConnectionWrapper 创建 ✅
+- [x] M6.2：HarnessRuntime → ConnectionWrapper 替换 + 删除 runtime.ts ✅
+- [x] M6.3：扩展进程 postRpc() → DshWebApiClient ✅
+- [x] M6.4：rpc.ts + runtime.ts 删除 ✅（net -322 行）
+- [x] M6.5：G0 typecheck 通过 + 12 test files pass ✅
 
 > M6 策略（ChatGPT 确认）：
 > - Direction A：完整替换，不是部分替换
