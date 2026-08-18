@@ -318,7 +318,7 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 > rpc.ts 的 RpcEnvelope/RpcResult 保留本地（webview 侧独立抽象层）。
 
 ### Phase M6：D2 rpc.ts -> WebApiClient + D3 runtime.ts -> ConnectionController
-- [ ] M6.1：DshWebApiClient 子类（覆盖 resolveBase）+ ConnectionWrapper（RuntimeApi 兼容 facade）
+- [x] M6.1：DshWebApiClient + ConnectionWrapper 创建 ✅（e245799）
 - [ ] M6.2：HarnessRuntime → ConnectionWrapper 替换 + 删除 runtime.ts
 - [ ] M6.3：扩展进程 postRpc() → DshWebApiClient（bootstrap/settings-bridge/extension）
 - [ ] M6.4：rpc.ts 拆分 → webview/rpc.ts（保留）+ 删除旧共享 rpc.ts
