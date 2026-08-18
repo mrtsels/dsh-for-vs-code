@@ -252,7 +252,7 @@ export class HarnessRuntime {
         else this.onHostFrame?.(payload as HostFrame, frame.rpcId);
       } catch {
         // 吞掉:帧解码失败或消费方异常,一律按坏帧处理并通知上层(不击穿扩展宿主)
-        const error = { code: 'bad-frame', message: 'undecodable ws frame', details: {} };
+        const error = { code: 'internal' as const, message: 'undecodable ws frame', details: {} };
         if (kind === 'mux') this.onMuxFrame?.({ type: 'stream/error', error });
         else this.onHostFrame?.({ type: 'stream/error', error });
       }
