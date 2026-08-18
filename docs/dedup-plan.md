@@ -306,16 +306,16 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 > - wire.ts 作为 upstream protocol type facade，export 整套会被消费的类型
 
 ### Phase M5：Generic compatibility layer
-- [ ] M5-1：wire-adapters.ts 定义 TypedClientRequest<P> 和 TypedServerResponse<T>
-  （Omit<Upstream, 'payload'> & { payload: P } 等）
-- [ ] M5-2：wire.ts re-export upstream ClientRequest、ServerResponse（non-generic）
-- [ ] M5-3：runtime.ts 中需要泛型的地方改用 TypedClientRequest<P>
-- [ ] M5-4：rpc.ts 中 postRpc 返回类型适配
-- [ ] M5-5：删除旧 generic ClientRequest<P> / ServerResponse<T> local 定义
-- [ ] M5-6：G0 typecheck 验证
+- [x] M5-1：wire.ts re-export upstream ClientRequest, ServerResponse, ServerRequest（non-generic）✅
+- [x] M5-2：TypedClientRequest<P> 不需要创建 ✅（ChatGPT 确认：泛型仅保留在 request<T>() 业务边界）
+- [x] M5-3：runtime.ts request<T>() 适配（parseServerResponse 非泛型，T 在提取边界 cast）✅
+- [x] M5-4：encodeClientRequest / parseServerRequestFrame 去泛型 ✅
+- [x] M5-5：test/wire.test.ts 适配（RpcId factory + 去泛型）✅
+- [x] M5-6：G0 typecheck 通过 ✅
 
-> M5 策略：泛型兼容层命名为 TypedXxx（不叫 ClientRequest），语义清晰：
-> ClientRequest = upstream wire protocol；TypedClientRequest<P> = extension typed helper。
+> M5 策略：wire types = upstream SSOT（non-generic）；泛型仅保留在业务函数签名（request<T>）。
+> TypedClientRequest<P> 不创建（当前无真实 request generic 需求）。
+> rpc.ts 的 RpcEnvelope/RpcResult 保留本地（webview 侧独立抽象层）。
 
 ### Phase M6：D2 rpc.ts -> WebApiClient + D3 runtime.ts -> ConnectionController
 - [ ] M6-1：创建 DshWebApiClient 子类（覆盖 resolveBase()，~10 行）
