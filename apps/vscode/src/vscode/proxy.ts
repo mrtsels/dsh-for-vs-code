@@ -85,17 +85,20 @@ export class HttpProxy {
 
     // ---- 拦截 host.listDirectory: 用 VS Code 原生文件选框替代 ----
     if (req.method === 'POST' && req.url === '/api/host.listDirectory' && this.pickDirectory) {
+      // 解析请求体获取 rpcId
+      let rpcId = '';
+      try { const parsed = JSON.parse(body.toString()); rpcId = parsed.rpcId ?? ''; } catch {}
       try {
         const result = await this.pickDirectory();
         if (!result) { res.writeHead(204, corsHeaders()); res.end(); return; }
-        const envelope = JSON.stringify({ ok: true, path: result });
+        const envelope = JSON.stringify({ type: 'server-response', rpcId, result: { ok: true, value: result } });
         const outHeaders = { ...corsHeaders(), 'content-type': 'application/json' };
         res.writeHead(200, outHeaders);
         this.onRequestLog?.({ method: 'POST', path: '/api/host.listDirectory', status: 200, at: Date.now() });
         res.end(envelope);
         return;
       } catch (e: any) {
-        const envelope = JSON.stringify({ ok: false, error: e?.message ?? String(e) });
+        const envelope = JSON.stringify({ type: 'server-response', rpcId, result: { ok: false, error: { code: 'directory-picker-error', message: e?.message ?? String(e), details: {} } } });
         const outHeaders = { ...corsHeaders(), 'content-type': 'application/json' };
         res.writeHead(500, outHeaders);
         res.end(envelope);
