@@ -9,3 +9,6 @@ dist/
 .serena/
 references/
 .dsh-webview-diag*.json
+
+# 中间文档产物
+docs/tmp/
