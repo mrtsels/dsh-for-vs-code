@@ -42,12 +42,16 @@ dsh web 实例 @ 127.0.0.1:3080(同一 runtime,第 N 个 viewer)
 
 ```sh
 pnpm install
-# vendor UI 源码构建(一次性;产物不入外层 workspace)
+# vendor UI 源码构建(修改 vendor 源码后必须重跑;产物不入外层 workspace)
 cd vendor/deepseek-harness
 corepack pnpm install --ignore-scripts
 corepack pnpm run build:lib:host && corepack pnpm run build:lib:client && corepack pnpm run build:web
 cd ../..
 pnpm build && pnpm build:shell   # 扩展 + dsh-shell 装配
+
+# ⚠️ vendor 源码更新后必须 rebuild lib 产物:
+# build-web-shell.mjs 从 vendor/lib/client.js 拷贝插件,不从源码构建
+# 只改源码不 rebuild → shell 产物仍是旧版
 code -n --extensionDevelopmentPath=$PWD/apps/vscode $PWD
 ```
 
