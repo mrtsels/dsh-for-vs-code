@@ -164,7 +164,9 @@ const EXCLUDE_PLUGINS = new Set([
   'dsh-client-ui-settings-models',
   'dsh-client-ui-settings-plugin-inventory',
   'dsh-client-ui-settings-plugins',
-  'dsh-client-ui-directory-picker-native',
+  // ui-directory-picker-native 保留:renderless occupant → host.pickDirectory → VS Code showOpenDialog
+  // ui-directory-picker-browse 排除:renderful in-app 浏览器,不需要
+  'dsh-client-ui-directory-picker-browse',
   // ui-workspace/ui-sidebar 保留:工作区选择/显示依赖;自动关联由扩展层实现
   // 注:browse 是 rc.5 源码多出的包(rc.6 服务端图没有),裁剪以对齐已验证的 28 集
 ]);

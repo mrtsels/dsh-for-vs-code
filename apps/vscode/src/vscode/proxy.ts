@@ -23,6 +23,8 @@ export class HttpProxy {
   private target: URL;
   /** 请求日志回调(扩展侧写入诊断文件,排查 webview 的 RPC 是否到达/成功) */
   onRequestLog?: (entry: { method: string; path: string; status: number; at: number }) => void;
+  /** VS Code 原生目录选择: 拦截 host.pickDirectory，返回选中路径或 null */
+  pickDirectory?: () => Promise<string | null>;
 
   constructor(targetBase: string) {
     this.target = new URL(targetBase);
@@ -80,6 +82,27 @@ export class HttpProxy {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
     const body = Buffer.concat(chunks);
+
+    // ---- 拦截 host.pickDirectory: 用 VS Code 原生文件选框替代 ----
+    if (req.method === 'POST' && req.url === '/api/host.pickDirectory' && this.pickDirectory) {
+      let rpcId = '';
+      try { const parsed = JSON.parse(body.toString()); rpcId = parsed.rpcId ?? ''; } catch {}
+      try {
+        const path = await this.pickDirectory();
+        const envelope = JSON.stringify({ type: 'server-response', rpcId, result: { ok: true, value: { path } } });
+        const outHeaders = { ...corsHeaders(), 'content-type': 'application/json' };
+        res.writeHead(200, outHeaders);
+        this.onRequestLog?.({ method: 'POST', path: '/api/host.pickDirectory', status: 200, at: Date.now() });
+        res.end(envelope);
+        return;
+      } catch (e: any) {
+        const envelope = JSON.stringify({ type: 'server-response', rpcId, result: { ok: false, error: { code: 'directory-picker-error', message: e?.message ?? String(e), details: {} } } });
+        const outHeaders = { ...corsHeaders(), 'content-type': 'application/json' };
+        res.writeHead(500, outHeaders);
+        res.end(envelope);
+        return;
+      }
+    }
 
     const headers: http.OutgoingHttpHeaders = {
       ...req.headers,

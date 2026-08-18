@@ -13,7 +13,6 @@
     "@deepseek-ai/dsh-client-ui-commands",
     "@deepseek-ai/dsh-client-ui-conversation",
     "@deepseek-ai/dsh-client-ui-cordis",
-    "@deepseek-ai/dsh-client-ui-directory-picker-browse",
     "@deepseek-ai/dsh-client-ui-goal",
     "@deepseek-ai/dsh-client-ui-input-trigger",
     "@deepseek-ai/dsh-client-ui-jobs",
@@ -32,7 +31,8 @@
     "@deepseek-ai/dsh-client-ui-workspace",
     "@deepseek-ai/dsh-cordis-client-runner",
     "@deepseek-ai/dsh-session-log-export",
-    "@deepseek-ai/dsh-typert-registry"
+    "@deepseek-ai/dsh-typert-registry",
+    "@deepseek-ai/dsh-client-ui-directory-picker-native"
   ],
   "note": "Phase 9: 恢复 ui-plan(Mode/计划控制)与 ui-agent-preset(上游原生 Agent Mode 标签+新会话模式选择,2026-08 用户要求);原 28 集基线见 git 历史"
 }

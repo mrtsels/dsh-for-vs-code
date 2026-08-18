@@ -72,6 +72,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const proxy = new HttpProxy(
     vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
   );
+  // VS Code 原生目录选择: 拦截 host.pickDirectory → showOpenDialog
+  proxy.pickDirectory = async (): Promise<string | null> => {
+    const result = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: 'Select',
+    });
+    return result?.[0]?.fsPath ?? null;
+  };
   // 代理必须先就绪再激活完成:webview 打开时(boot 的 settings 读取)若代理未 listen,
   // 语言快照加载失败 → 语言卡死在浏览器语言。activate async 保证竞态消除。
   try {
