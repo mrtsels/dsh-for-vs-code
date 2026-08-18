@@ -746,14 +746,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('deepseekHarness.selectAgentPreset', async () => {
       const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
       try {
-        const roster = await readAgentPresetRoster(new DshWebApiClient(current));
-        if (roster === undefined) throw new Error('实例未就绪');
+        const api = new DshWebApiClient(current);
+        const resp = await api.callMethod<{ presets?: Array<{ id: string; name?: string; isDefault?: boolean }> }>('agentPreset.list', {});
+        const presets = resp.result.value?.presets;
+        if (presets === undefined) throw new Error('实例未就绪');
         const currentVal = vscode.workspace.getConfiguration('deepseekHarness').get<string>('agentPreset', '');
         const pick = await vscode.window.showQuickPick(
-          ['', ...roster].map((id) => ({
-            label: id === '' ? '跟随实例默认(不写回)' : getPresetDisplayName(id),
-            description: id === currentVal ? '当前' : undefined,
-            id,
+          [{ id: '', name: '跟随实例默认(不写回)' }, ...presets.map((p) => ({ id: p.id, name: p.name ?? getPresetDisplayName(p.id) }))].map((p) => ({
+            label: p.name,
+            description: p.id === currentVal ? '当前' : undefined,
+            id: p.id,
           })),
           { placeHolder: '选择新建会话的默认 agent preset' },
         );
