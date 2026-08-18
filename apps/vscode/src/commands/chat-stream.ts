@@ -51,7 +51,7 @@ export function stepChatStream(state: ChatStreamState, events: SessionEvent[]): 
       case 'assistant/message': {
         // 去重:chunks 已是正文时,message 内容(若带)与累积文本整段重复 → 跳过
         if (!state.sawTextDelta) {
-          const t = extractContentText(event.data?.content);
+          const t = extractContentText(event.data?.message?.content);
           if (t !== '') actions.push({ kind: 'markdown', text: t });
         }
         break;

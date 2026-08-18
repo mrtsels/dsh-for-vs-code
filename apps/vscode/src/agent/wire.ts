@@ -4,7 +4,7 @@
  * 迁移策略（D→C）：protocol boundary 类型逐步 re-export 上游，
  * application domain 类型保留本地。见 docs/dedup-plan.md Phase M2-M6。
  *
- * 当前已 re-export 上游：SkillEntry, MuxFrame, HostFrame
+ * 当前已 re-export 上游：SkillEntry, MuxFrame, HostFrame, SessionEvent, SessionEventMap, TurnEndReason
  * 本地类型保留：RpcId, RpcError, RpcResult, ClientRequest, ServerResponse, TextPromptPart, PromptPart, ...
  *
  * 以适配扩展的 switch/default:break 消费模式和 webview 跨层传递。
@@ -46,6 +46,8 @@
 // ─── 上游 re-export ──────────────────────────────────────────────
 
 export type { SkillEntry } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { SessionEvent, SessionEventMap, SessionEventType, TurnEndReason } from '@deepseek-ai/dsh-session/types'
+export type { SessionEvent, SessionEventMap, SessionEventType, TurnEndReason }
 import { createRpcId } from './wire-adapters.js'
 export { createRpcId } from './wire-adapters.js'
 
@@ -94,33 +96,9 @@ export interface TextPromptPart {
 }
 export type PromptPart = TextPromptPart;
 
-/** 会话事件（最小判别 union，未知事件进 catch-all；渲染只消费已知类型） */
-export interface EventData {
-  turn?: number;
-  step?: number;
-  content?: PromptPart[];
-  chunk?: Chunk;
-  title?: string;
-  reason?: string;
-  source?: { kind: string; rpcId?: string };
-  tool?: unknown;
-  [key: string]: unknown;
-}
-export interface SessionEvent {
-  type: string;
-  seq: number;
-  time: number;
-  data: EventData;
-}
-
-/** assistant/chunk 的块结构 */
-export interface Chunk {
-  type: string;
-  index: number;
-  blockType?: string;
-  text?: string;
-  [key: string]: unknown;
-}
+// SessionEvent / EventData / Chunk 已从上游 re-export（见顶部 import）
+// 上游 SessionEvent 是精确 mapped type：data 类型随 event.type 自动推导
+// 例如 event.type === 'turn/end' 时 event.data.reason: TurnEndReason
 
 /** 后台任务视图（P3-4，jobs.d.ts JobView 子集，协议锁定） */
 export interface JobView {

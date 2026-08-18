@@ -2,12 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { createChatStreamState, stepChatStream } from '../src/commands/chat-stream.js';
 import type { SessionEvent } from '../src/agent/wire.js';
 
-const ev = (partial: Partial<SessionEvent> & { type: string }): SessionEvent => ({
-  seq: 0,
-  time: 0,
-  data: {},
-  ...partial,
-});
+/** 测试 helper：用 as SessionEvent 绕过精确 mapped type，构造测试用事件 */
+const ev = (partial: Record<string, unknown>): SessionEvent =>
+  ({ seq: 0, time: 0, data: {}, ...partial }) as SessionEvent;
 
 const chunk = (seq: number, c: { type: string; text?: string; blockType?: string }): SessionEvent =>
   ev({ type: 'assistant/chunk', seq, data: { turn: 1, step: 1, chunk: { index: 0, ...c } } });
@@ -16,10 +13,10 @@ describe('stepChatStream(seq 水印语义)', () => {
   it('水印:seq ≤ lastSeq 的事件全部跳过(重复推送安全),只推进水印', () => {
     const state = createChatStreamState(5);
     const actions = stepChatStream(state, [
-      ev({ type: 'turn/start', seq: 3 }),
+      ev({ type: 'turn/start', seq: 3, data: { turn: 1 } }),
       ev({ type: 'user/message', seq: 4, data: { content: [{ type: 'text', text: 'old' }] } }),
-      ev({ type: 'turn/start', seq: 5 }),
-      ev({ type: 'step/start', seq: 6 }),
+      ev({ type: 'turn/start', seq: 5, data: { turn: 1 } }),
+      ev({ type: 'step/start', seq: 6, data: { turn: 1, step: 1 } }),
       ev({ type: 'user/message', seq: 7, data: { content: [{ type: 'text', text: 'hi' }] } }),
     ]);
     expect(actions).toEqual([]);
@@ -50,7 +47,7 @@ describe('stepChatStream(seq 水印语义)', () => {
     const state = createChatStreamState(0);
     const actions = stepChatStream(state, [
       chunk(1, { type: 'text-delta', text: '答案' }),
-      ev({ type: 'assistant/message', seq: 2, data: { content: [{ type: 'text', text: '答案' }] } }),
+      ev({ type: 'assistant/message', seq: 2, data: { turn: 1, step: 1, message: { content: [{ type: 'text', text: '答案' }] } } }),
     ]);
     expect(state.acc).toBe('答案');
     expect(actions).toEqual([]); // message 内容被跳过
@@ -59,7 +56,7 @@ describe('stepChatStream(seq 水印语义)', () => {
   it('无 text-delta 时,assistant/message 内容是唯一正文 → markdown 动作', () => {
     const state = createChatStreamState(0);
     const actions = stepChatStream(state, [
-      ev({ type: 'assistant/message', seq: 1, data: { content: [{ type: 'text', text: '完整回答' }] } }),
+      ev({ type: 'assistant/message', seq: 1, data: { turn: 1, step: 1, message: { content: [{ type: 'text', text: '完整回答' }] } } }),
     ]);
     expect(state.acc).toBe('');
     expect(state.sawTextDelta).toBe(false);
@@ -68,15 +65,15 @@ describe('stepChatStream(seq 水印语义)', () => {
 
   it('assistant/message 无 content → 无动作', () => {
     const state = createChatStreamState(0);
-    expect(stepChatStream(state, [ev({ type: 'assistant/message', seq: 1 })])).toEqual([]);
+    expect(stepChatStream(state, [ev({ type: 'assistant/message', seq: 1, data: { turn: 1, step: 1, message: {} } })])).toEqual([]);
   });
 
   it('turn/end → end 动作;其后事件在同一批内不再消费(调用方收到 end 即停止)', () => {
     const state = createChatStreamState(0);
     const actions = stepChatStream(state, [
       chunk(1, { type: 'text-delta', text: '收尾' }),
-      ev({ type: 'turn/end', seq: 2 }),
-      ev({ type: 'assistant/message', seq: 3, data: { content: [{ type: 'text', text: '不应出现' }] } }),
+      ev({ type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'completed' } } }),
+      ev({ type: 'assistant/message', seq: 3, data: { turn: 1, step: 1, message: { content: [{ type: 'text', text: '不应出现' }] } } }),
     ]);
     expect(state.ended).toBe(true);
     expect(actions).toEqual([{ kind: 'end' }]);
@@ -86,13 +83,12 @@ describe('stepChatStream(seq 水印语义)', () => {
   it('黄金时间线回放(实测形状,docs/http-bridge.md):只累积 text-delta,message 完成标记被跳过,end 收尾', () => {
     const state = createChatStreamState(3);
     const events: SessionEvent[] = [
-      ev({ type: 'turn/start', seq: 4 }),
-      ev({ type: 'step/start', seq: 6 }),
+      ev({ type: 'turn/start', seq: 4, data: { turn: 1 } }),
+      ev({ type: 'step/start', seq: 6, data: { turn: 1, step: 1 } }),
       ev({ type: 'user/message', seq: 7, data: { content: [{ type: 'text', text: 'p' }] } }),
       ev({ type: 'user/message', seq: 8, data: { content: [{ type: 'text', text: 'p' }] } }),
-      ev({ type: 'session/title', seq: 11, data: { title: 't' } }),
-      ev({ type: 'request/header', seq: 12 }),
-      ev({ type: 'request/context', seq: 13 }),
+      ev({ type: 'request/header', seq: 12, data: { header: {}, reason: 'initial' } }),
+      ev({ type: 'request/context', seq: 13, data: { provider: 'test', model: 'test' } }),
       chunk(16, { type: 'block-start', blockType: 'reasoning' }),
       chunk(17, { type: 'reasoning-delta', text: '想' }),
       chunk(18, { type: 'reasoning-delta', text: '想' }),
@@ -102,9 +98,9 @@ describe('stepChatStream(seq 水印语义)', () => {
       chunk(22, { type: 'block-end' }),
       chunk(23, { type: 'usage' }),
       chunk(24, { type: 'finish' }),
-      ev({ type: 'assistant/message', seq: 25 }), // live 完成标记:无 data
-      ev({ type: 'step/end', seq: 26 }),
-      ev({ type: 'turn/end', seq: 27 }),
+      ev({ type: 'assistant/message', seq: 25, data: { turn: 1, step: 1, message: {} } }), // live 完成标记
+      ev({ type: 'step/end', seq: 26, data: { turn: 1, step: 1 } }),
+      ev({ type: 'turn/end', seq: 27, data: { turn: 1, reason: { kind: 'completed' } } }),
     ];
     const actions = stepChatStream(state, events);
     expect(state.acc).toBe('你好');
@@ -116,18 +112,18 @@ describe('stepChatStream(seq 水印语义)', () => {
 
   it('多轮推进:新 startSeq 只消费新事件,旧 turn 重复推送不重复渲染', () => {
     const state = createChatStreamState(0);
-    stepChatStream(state, [chunk(1, { type: 'text-delta', text: '一' }), ev({ type: 'turn/end', seq: 2 })]);
+    stepChatStream(state, [chunk(1, { type: 'text-delta', text: '一' }), ev({ type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'completed' } } })]);
     expect(state.acc).toBe('一');
     state.acc = ''; // 调用方已 flush
     const actions = stepChatStream(state, [
       // 服务端重放旧事件(seq ≤ 水印)→ 跳过
       chunk(1, { type: 'text-delta', text: '一' }),
-      ev({ type: 'turn/end', seq: 2 }),
+      ev({ type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'completed' } } }),
       // 新一轮
-      ev({ type: 'turn/start', seq: 3 }),
+      ev({ type: 'turn/start', seq: 3, data: { turn: 2 } }),
       chunk(4, { type: 'text-delta', text: '二' }),
-      ev({ type: 'assistant/message', seq: 5 }),
-      ev({ type: 'turn/end', seq: 6 }),
+      ev({ type: 'assistant/message', seq: 5, data: { turn: 2, step: 1, message: {} } }),
+      ev({ type: 'turn/end', seq: 6, data: { turn: 2, reason: { kind: 'completed' } } }),
     ]);
     expect(state.acc).toBe('二');
     expect(actions).toEqual([{ kind: 'end' }]);

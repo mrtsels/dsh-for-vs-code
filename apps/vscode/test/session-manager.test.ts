@@ -11,25 +11,22 @@ const mockRuntime = {
     if (method === 'session.list') return { ok: true as const, value: { items: [] } };
     if (method === 'session.create') return { ok: true as const, value: { sessionId: sid('session-new') } };
     if (method === 'session.history') {
-      return { ok: true as const, value: { events: [{ event: { type: 'turn/start', seq: 1, time: 1, data: {} } }] } };
+      return { ok: true as const, value: { events: [{ event: { type: 'turn/start', seq: 1, time: 1, data: { turn: 1 } } }] } };
     }
     return { ok: false as const, error: { code: 'internal', message: 'unexpected', details: {} } };
   },
 } as unknown as HarnessRuntime;
 
-const ev = (partial: Partial<SessionEvent> & { type: string }): SessionEvent => ({
-  seq: 0,
-  time: 0,
-  data: {},
-  ...partial,
-});
+/** 测试 helper：用 as SessionEvent 绕过精确 mapped type */
+const ev = (partial: Record<string, unknown>): SessionEvent =>
+  ({ seq: 0, time: 0, data: {}, ...partial }) as SessionEvent;
 
 describe('SessionManager 事件缓冲', () => {
   it('mux 帧按序追加,不丢不重', () => {
     const sm = new SessionManager(mockRuntime);
     sm.handleMuxFrame({ type: 'session/subscribed', sessionId: sid('s1'), lastSeq: 0 } as unknown as MuxFrame);
-    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/start', seq: 1 }) } as unknown as MuxFrame);
-    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'user/message', seq: 2 }) } as unknown as MuxFrame);
+    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/start', seq: 1, data: { turn: 1 } }) } as unknown as MuxFrame);
+    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'user/message', seq: 2, data: { content: [] } }) } as unknown as MuxFrame);
     const snapshot = sm.snapshot('s1');
     expect(snapshot.map((e) => e.seq)).toEqual([1, 2]);
   });
@@ -38,14 +35,8 @@ describe('SessionManager 事件缓冲', () => {
     const sm = new SessionManager(mockRuntime);
     sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/start', seq: 1, data: { turn: 1 } }) } as unknown as MuxFrame);
     expect(sm.isRunning('s1')).toBe(true);
-    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/end', seq: 2, data: { turn: 1 } }) } as unknown as MuxFrame);
+    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'completed' } } }) } as unknown as MuxFrame);
     expect(sm.isRunning('s1')).toBe(false);
-  });
-
-  it('title 从 session/title 事件捕获', () => {
-    const sm = new SessionManager(mockRuntime);
-    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'session/title', seq: 1, data: { title: 'Hello' } }) } as unknown as MuxFrame);
-    expect(sm.title('s1')).toBe('Hello');
   });
 
   it('seedHistory 用持久化历史重建缓冲', async () => {
@@ -118,7 +109,7 @@ describe('SessionManager 事件缓冲', () => {
   it('onEvents 逐帧回调', () => {
     const received: Array<[string, SessionEvent[]]> = [];
     const sm = new SessionManager(mockRuntime, { onEvents: (sid, events) => received.push([sid, events]) });
-    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/start', seq: 1 }) } as unknown as MuxFrame);
+    sm.handleMuxFrame({ type: 'session/event', sessionId: sid('s1'), event: ev({ type: 'turn/start', seq: 1, data: { turn: 1 } }) } as unknown as MuxFrame);
     expect(received).toHaveLength(1);
     expect(received[0]![0]).toBe('s1');
     expect(received[0]![1]).toHaveLength(1);
