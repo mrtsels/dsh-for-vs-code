@@ -334,6 +334,17 @@ export type { ClientRequest, ServerResponse } from '../../../vendor/deepseek-har
 
 > D2/D3 可行性详情见 dedup-d2-d3-feasibility.md
 
+### Phase M7：UI component dedup（上游 UI 组件复用）
+- [ ] M7-1：package.json description 动态化（preset 名册从 api.agentPreset.list() 获取，不硬编码）
+- [ ] M7-2：评估 ui-agent-preset 复用可行性（webview bundle 兼容性、Cordis 依赖链）
+- [ ] M7-3：webview preset picker 复用上游组件（如果可行）或至少同步显示名（code→PTC, cordis→Creator）
+- [ ] M7-4：settings-bridge preset roster 动态化（已用 DshWebApiClient，确认无硬编码名）
+- [ ] M7-5：G0 验证
+
+> M7 动机：rc.5→rc.7 上游将 "code" 重命名为 "PTC mode"、"cordis" 重命名为 "Creator mode"，
+> 扩展 package.json description 仍硬编码旧名。根本原因：扩展自维护 preset 展示逻辑，
+> 未复用上游 ui-agent-preset 包的本地化字符串和 React 组件。
+
 ### 迁移工具约定
 - @ts-expect-error 标签格式：// @ts-expect-error UPSTREAM-MIGRATION(类型名): 原因
 - 优先级：narrowing > factory > satisfies > type assertion > @ts-expect-error
