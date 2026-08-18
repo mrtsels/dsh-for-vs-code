@@ -5,11 +5,10 @@ import {
   parseServerResponse,
   type RpcResult,
 } from '../src/agent/wire.js';
-import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api';
 
 describe('wire 编解码', () => {
   it('encodeClientRequest 产出完整信封', () => {
-    const req = encodeClientRequest('session.list', { cursor: 'x' }, RpcId('rpc-1'));
+    const req = encodeClientRequest('session.list', { cursor: 'x' }, 'rpc-1' as any);
     expect(req).toEqual({ type: 'client-request', rpcId: 'rpc-1', method: 'session.list', payload: { cursor: 'x' } });
   });
 

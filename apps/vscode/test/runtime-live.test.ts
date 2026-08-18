@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { ConnectionWrapper } from '../src/api/connection-wrapper.js';
 
+// @vitest-environment node
 const BASE_URL = process.env.DSH_BASE_URL ?? 'http://127.0.0.1:3080';
 
 async function isReachable(): Promise<boolean> {
