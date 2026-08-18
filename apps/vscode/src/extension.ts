@@ -31,8 +31,10 @@ import { registerCodeActions, registerNativeCommands } from './commands/native.j
 import type { AppContext } from './commands/context.js';
 import type { WebviewRequest } from './webview/bridge.js';
 import type { ExtensionMessage } from './webview/bridge.js';
+import type { AttachmentState } from './webview/bridge.js';
 import type { RuntimeState } from './agent/runtime.js';
 import type { MuxFrame } from './agent/wire.js';
+import type { DynamicCordisInventoryRow } from './agent/wire.js';
 
 /** 主 UI 宿主:活动栏侧边栏视图(WebviewView 内嵌 dsh 原生 UI) */
 interface ChatPanelHost {
@@ -72,6 +74,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const proxy = new HttpProxy(
     vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl),
   );
+  // VS Code 原生目录选择: 拦截 host.listDirectory，用 showOpenDialog 替代
+  proxy.pickDirectory = async (): Promise<string | undefined> => {
+    const result = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: 'Select',
+    });
+    if (!result || result.length === 0) return undefined;
+    return result[0]?.fsPath;
+  };
   // 代理必须先就绪再激活完成:webview 打开时(boot 的 settings 读取)若代理未 listen,
   // 语言快照加载失败 → 语言卡死在浏览器语言。activate async 保证竞态消除。
   try {
@@ -113,6 +126,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // ---- Phase 10 附着管理器(文件/选区)----
   // 状态推送 → webview;错误(拖入/读取失败)→ webview toast。订阅与 dispose 由管理器自持。
+  // dsh-file-attach 插件身份(wire inventory;webview 驱动插件 client half 激活 + 建议委托)。
+  // runtime 在下方初始化 —— 回调异步执行时已就绪,闭包引用安全。
+  const resolveCordis = async (): Promise<AttachmentState['cordis']> => {
+    try {
+      const result = await runtime.request<DynamicCordisInventoryRow[]>('dynamicCordisRunner/inventory', { args: {} });
+      if (!result.ok) return null;
+      const row = result.value.find(
+        (r) =>
+          r.activeRun !== undefined &&
+          r.packages.some((p) => p.hasClientHalf && p.name === 'dsh-file-attach'),
+      );
+      if (row === undefined || row.activeRun === undefined) return null;
+      return { agentId: row.agentId, pluginId: row.pluginId, packageId: row.activeRun.packageId };
+    } catch {
+      return null; // 实例不可达/插件未定义:按「插件缺失」处理,webview 不驱动激活
+    }
+  };
   const attachmentManager = new ContextAttachmentManager(
     (state) => {
       chatPanel.post({ type: 'dsh:attachments:state', state });
@@ -120,6 +150,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     (error) => {
       chatPanel.post({ type: 'dsh:attachments:error', code: error.code, message: error.message });
     },
+    resolveCordis,
   );
   disposables.add({ dispose: () => attachmentManager.dispose() });
   // 命令:切换附着开关(设置 + webview chip 双入口;设置变化经 onDidChangeConfiguration 推送)
@@ -142,6 +173,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     onStatus: (status) => {
       updateStatusItem(status.state, status.error);
       postState();
+      // 连接就绪 → 重推附着状态(cordis 身份解析可能在 boot 时失败,连接后重试)
+      if (status.state === 'connected') attachmentManager.pushNow();
       if (status.state === 'connected' && state.value) {
         // P1-5:重连成功 → 重取活动会话历史(UI 按 seq 去重,重复推送安全)
         void sessions.seedHistory(state.value);
@@ -270,12 +303,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             });
           }
         }
-        // Phase 10:webview 就绪即推附着状态(附着 UI 的 dsh:attachments:ready 兜底)
-        chatPanel.post({ type: 'dsh:attachments:state', state: attachmentManager.getState() });
+        // Phase 10:webview 就绪即推附着状态(附着 UI 的 dsh:attachments:ready 兜底;
+        // pushNow 触发 cordis 身份解析,webview 据此驱动插件 client half 激活)
+        attachmentManager.pushNow();
         break;
       // ---- Phase 10 附着 ----
       case 'dsh:attachments:ready':
-        chatPanel.post({ type: 'dsh:attachments:state', state: attachmentManager.getState() });
+        attachmentManager.pushNow();
         break;
       case 'dsh:attachments:add':
         await attachmentManager.addUris(request.attachments.map((a) => a.uri));
