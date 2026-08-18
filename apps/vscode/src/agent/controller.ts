@@ -3,7 +3,7 @@
  * 状态机:idle / running / error / disconnected(全局,来自 runtime.onStatus 与活动会话的 turn 事件)。
  * 零 vscode 依赖。
  */
-import type { HarnessRuntime } from './runtime.js';
+import type { ConnectionWrapper } from '../api/connection-wrapper.js';
 import type { SessionManager } from './session-manager.js';
 import type { MuxFrame, HostFrame } from './wire.js';
 
@@ -16,7 +16,7 @@ export class AgentController {
   private stopStatus?: () => void;
 
   constructor(
-    private readonly runtime: HarnessRuntime,
+    private readonly runtime: ConnectionWrapper,
     private readonly sessions: SessionManager,
     options?: { onState?: (state: ControllerState) => void },
   ) {

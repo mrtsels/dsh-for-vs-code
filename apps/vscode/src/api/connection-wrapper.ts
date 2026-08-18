@@ -126,6 +126,7 @@ export class ConnectionWrapper {
   get currentState(): RuntimeState { return this._currentState }
   get lastError(): string | undefined { return this._lastError }
   get description(): HostDescription | undefined { return this._description }
+  get currentBaseUrl(): string { return this.options.baseUrl }
 
   // ─── Internal ──────────────────────────────────────────────────────
 

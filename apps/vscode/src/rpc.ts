@@ -3,7 +3,12 @@
  *
  * 信封协议(TASK §0.3):POST /api/<method>,body {type:'client-request', rpcId, method, payload}
  * → {type:'server-response', rpcId, result:{ok, value}}。仅 127.0.0.1 受信任。
+ *
+ * M6.3: 新增基于 DshWebApiClient 的函数签名（listSessions、ensureWorkspace）。
+ *       postRpc 保留向后兼容，新代码优先使用 DshWebApiClient。
  */
+
+import type { DshWebApiClient } from './api/dsh-web-api-client.js';
 
 export interface RpcResult {
   ok?: boolean;
@@ -59,10 +64,9 @@ export interface SessionItem {
 }
 
 /** 拉取会话列表;失败抛错 */
-export async function listSessions(baseUrl: string): Promise<SessionItem[]> {
-  const body = await postRpc(baseUrl, 'session.list', {});
-  const value = body?.result?.value as { items?: SessionItem[] } | undefined;
-  const items = value?.items;
+export async function listSessions(api: DshWebApiClient): Promise<SessionItem[]> {
+  const resp = await api.callMethod<{ items?: SessionItem[] }>('session.list', {});
+  const items = resp.result.value?.items;
   if (!Array.isArray(items)) throw new Error('session.list: 响应缺少 items');
   return items;
 }
@@ -72,14 +76,13 @@ export async function listSessions(baseUrl: string): Promise<SessionItem[]> {
  * 已存在 → 返回其 workspaceId;缺失 → workspace.create({path})(路径必须真实存在)。
  * 失败返回 undefined(实例不可达/路径无效),调用方按"无 workspace"回退。
  */
-export async function ensureWorkspace(baseUrl: string, path: string): Promise<string | undefined> {
-  const list = await postRpc(baseUrl, 'workspace.list', {});
-  const items = (list?.result?.value as { items?: Array<{ workspaceId: string; path: string }> } | undefined)
-    ?.items;
+export async function ensureWorkspace(api: DshWebApiClient, path: string): Promise<string | undefined> {
+  const list = await api.callMethod<{ items?: Array<{ workspaceId: string; path: string }> }>('workspace.list', {});
+  const items = list.result.value?.items;
   if (Array.isArray(items)) {
     const hit = items.find((w) => w.path === path);
     if (hit) return hit.workspaceId;
   }
-  const created = await postRpc(baseUrl, 'workspace.create', { path });
-  return (created?.result?.value as { workspaceId?: string } | undefined)?.workspaceId;
+  const created = await api.callMethod<{ workspaceId?: string }>('workspace.create', { path });
+  return created.result.value?.workspaceId;
 }

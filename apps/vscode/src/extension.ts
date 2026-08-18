@@ -5,14 +5,15 @@
  */
 import * as vscode from 'vscode';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { HarnessRuntime } from './agent/runtime.js';
+import { ConnectionWrapper } from './api/connection-wrapper.js';
+import type { RpcId as UpstreamRpcId } from '@deepseek-ai/dsh-host-apiproxy/api';
 import { SessionManager } from './agent/session-manager.js';
 import { AgentController } from './agent/controller.js';
 import { ChangesPanel, toChangeItems } from './webview/changes-panel.js';
 import { ChatPanel } from './webview/chat-panel.js';
 import { readAgentPresetRoster, registerSettingsBridge } from './settings-bridge.js';
 import { ensureFolderSession } from './sessions/bootstrap.js';
-import { postRpc } from './rpc.js';
+import { DshWebApiClient } from './api/dsh-web-api-client.js';
 import { SnapshotWatcher } from './vscode/workspace.js';
 import { WorkspaceChangeDecorationProvider } from './vscode/workspace-decoration.js';
 import { HttpProxy } from './vscode/proxy.js';
@@ -31,7 +32,7 @@ import { registerCodeActions, registerNativeCommands } from './commands/native.j
 import type { AppContext } from './commands/context.js';
 import type { WebviewRequest } from './webview/bridge.js';
 import type { ExtensionMessage } from './webview/bridge.js';
-import type { RuntimeState } from './agent/runtime.js';
+import type { RuntimeState } from './api/connection-wrapper.js';
 import type { MuxFrame } from './agent/wire.js';
 
 /** 主 UI 宿主:活动栏侧边栏视图(WebviewView 内嵌 dsh 原生 UI) */
@@ -147,16 +148,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // ---- runtime / sessions / controller ----
-  const runtime = new HarnessRuntime({
-    baseUrl,
-    onStatus: (status) => {
-      updateStatusItem(status.state, status.error);
-      postState();
-      if (status.state === 'connected' && state.value) {
-        // P1-5:重连成功 → 重取活动会话历史(UI 按 seq 去重,重复推送安全)
-        void sessions.seedHistory(state.value);
-      }
-    },
+  const runtime = new ConnectionWrapper({ baseUrl });
+  runtime.subscribeStatus((status) => {
+    updateStatusItem(status.state, status.error);
+    postState();
+    if (status.state === 'connected' && state.value) {
+      // P1-5:重连成功 → 重取活动会话历史(UI 按 seq 去重,重复推送安全)
+      void sessions.seedHistory(state.value);
+    }
   });
   const sessions = new SessionManager(runtime, {
     onEvents: (sessionId, events) => {
@@ -244,7 +243,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     chatPanel.post({
       type: 'state',
       state: controller.currentState,
-      host: runtime.description
+      host: (runtime.description?.cwd && runtime.description?.model)
         ? { cwd: runtime.description.cwd, model: runtime.description.model }
         : undefined,
     });
@@ -496,7 +495,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         '拒绝',
       );
       const outcome = choice === '允许一次' ? 'allowed-once' : 'rejected';
-      const result = await runtime.respond(rpcId, {
+      const result = await runtime.respond(rpcId as UpstreamRpcId, {
         sessionId: frame.sessionId,
         approvalId: frame.approvalId,
         outcome,
@@ -507,7 +506,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       logger.warn(`approval 流程异常:${error instanceof Error ? error.message : String(error)}`);
       if (rpcId) {
         try {
-          await runtime.respond(rpcId, { sessionId: frame.sessionId, approvalId: frame.approvalId, outcome: 'rejected' });
+          await runtime.respond(rpcId as UpstreamRpcId, { sessionId: frame.sessionId, approvalId: frame.approvalId, outcome: 'rejected' });
         } catch {
           // 吞掉:实例已不可达,服务端会自行超时;不再次外抛
         }
@@ -643,7 +642,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
   // 无工作区时:session.create 空负载 → 实例默认 cwd
   const createSessionAtDefaultCwd = async (current: string): Promise<string | undefined> => {
-    const body = await postRpc(current, 'session.create', {});
+    const api = new DshWebApiClient(current);
+    const body = await api.callMethod<{ sessionId: string }>('session.create', {});
     const sessionId = (body?.result?.value as { sessionId?: string } | undefined)?.sessionId;
     return typeof sessionId === 'string' ? sessionId : undefined;
   };
@@ -665,7 +665,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // 读实例 locale.preference(诊断用;失败 undefined)
   const readInstanceLocale = async (current: string): Promise<string | undefined> => {
     try {
-      const body = await postRpc(current, 'settings.describe', {});
+      const api = new DshWebApiClient(current);
+      const body = await api.callMethod<{ namespaces?: Array<{ ns: string; value?: Record<string, unknown> }> }>('settings.describe', {});
       const namespaces = (body?.result?.value as
         | { namespaces?: Array<{ ns: string; value?: Record<string, unknown> }> }
         | undefined)?.namespaces;
@@ -679,13 +680,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // 语言强制对齐:读实例 locale.preference,与目标不一致则 settings.update 写回
   const syncLocaleToInstance = async (current: string, target: string): Promise<boolean> => {
     try {
-      const body = await postRpc(current, 'settings.describe', {});
+      const api = new DshWebApiClient(current);
+      const body = await api.callMethod<{ namespaces?: Array<{ ns: string; value?: Record<string, unknown> }> }>('settings.describe', {});
       const namespaces = (body?.result?.value as
         | { namespaces?: Array<{ ns: string; value?: Record<string, unknown> }> }
         | undefined)?.namespaces;
       const currentLocale = namespaces?.find((n) => n.ns === 'locale')?.value?.preference;
       if (currentLocale === target) return false;
-      await postRpc(current, 'settings.update', { ns: 'locale', patch: { preference: target } });
+      await api.callMethod('settings.update', { ns: 'locale', patch: { preference: target } });
       return true;
     } catch (error) {
       // 实例不可达:静默,下次 ready 重试
@@ -700,7 +702,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
       try {
         const desc = await runtime.connect();
-        const body = await postRpc(current, 'settings.describe', {});
+        const api = new DshWebApiClient(current);
+      const body = await api.callMethod<{ namespaces?: Array<{ ns: string; value?: Record<string, unknown> }> }>('settings.describe', {});
         const nss = (body?.result?.value as { namespaces?: Array<{ ns: string; value?: { models?: Array<{ id: string; name?: string }> } }> } | undefined)?.namespaces ?? [];
         const models = nss.find((n) => n.ns === 'llm-deepseek')?.value?.models ?? [];
         const currentModel = desc.model;
@@ -742,7 +745,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('deepseekHarness.selectAgentPreset', async () => {
       const current = vscode.workspace.getConfiguration('deepseekHarness').get<string>('baseUrl', baseUrl);
       try {
-        const roster = await readAgentPresetRoster(current);
+        const roster = await readAgentPresetRoster(new DshWebApiClient(current));
         if (roster === undefined) throw new Error('实例未就绪');
         const currentVal = vscode.workspace.getConfiguration('deepseekHarness').get<string>('agentPreset', '');
         const pick = await vscode.window.showQuickPick(

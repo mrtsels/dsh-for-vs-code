@@ -5,7 +5,8 @@
  * (dsh.initialSessionId),经 __DSH_BOOT_SESSION__ 注入或 dsh:bootstrap-session 补发。
  */
 
-import { ensureWorkspace, listSessions, postRpc } from '../rpc.js';
+import { DshWebApiClient } from '../api/dsh-web-api-client.js';
+import { ensureWorkspace, listSessions } from '../rpc.js';
 
 /**
  * 确保文件夹有会话:workspace.create(幂等)→ 复用空白会话 → 新建。
@@ -17,30 +18,29 @@ export async function ensureFolderSession(
   baseUrl: string,
   folderPath: string,
 ): Promise<string | undefined> {
-  const workspaceId = await ensureWorkspace(baseUrl, folderPath);
+  const api = new DshWebApiClient(baseUrl);
+  const workspaceId = await ensureWorkspace(api, folderPath);
   if (workspaceId === undefined) return undefined;
   // 复用:该 workspace 成员中已有 cwd 一致的空白会话(与上游 connectWorkspace 同规则)
-  const members = await workspaceSessionIds(baseUrl, workspaceId);
+  const members = await workspaceSessionIds(api, workspaceId);
   if (members !== undefined) {
-    const sessions = await listSessions(baseUrl).catch(() => []);
+    const sessions = await listSessions(api).catch(() => []);
     for (const item of sessions) {
       if (item.blank && item.cwd === folderPath && members.has(item.sessionId)) {
         return item.sessionId;
       }
     }
   }
-  const created = await postRpc(baseUrl, 'session.create', { workspaceId });
-  const sessionId = (created?.result?.value as { sessionId?: string } | undefined)?.sessionId;
+  const created = await api.callMethod<{ sessionId?: string }>('session.create', { workspaceId });
+  const sessionId = created.result.value?.sessionId;
   return typeof sessionId === 'string' ? sessionId : undefined;
 }
 
 /** workspace.list 中该 workspace 的 sessionIds 集合;失败 undefined。 */
-async function workspaceSessionIds(baseUrl: string, workspaceId: string): Promise<Set<string> | undefined> {
+async function workspaceSessionIds(api: DshWebApiClient, workspaceId: string): Promise<Set<string> | undefined> {
   try {
-    const body = await postRpc(baseUrl, 'workspace.list', {});
-    const items = (body?.result?.value as
-      | { items?: Array<{ workspaceId: string; sessionIds?: string[] }> }
-      | undefined)?.items;
+    const resp = await api.callMethod<{ items?: Array<{ workspaceId: string; sessionIds?: string[] }> }>('workspace.list', {});
+    const items = resp.result.value?.items;
     const hit = items?.find((w) => w.workspaceId === workspaceId);
     return hit === undefined ? undefined : new Set(hit.sessionIds ?? []);
   } catch {

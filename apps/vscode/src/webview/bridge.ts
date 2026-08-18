@@ -116,12 +116,17 @@ export interface AttachmentState {
   selectionAvailable: boolean;
   activeFile?: {
     path: string;
+    /** 绝对路径(插件 fs.resolve 以进程 cwd 为基准,相对路径解析不可靠 —— 建议附着必须传绝对路径) */
+    fsPath: string;
     languageId: string;
     isDirty: boolean;
     isUntitled: boolean;
   };
   selections: readonly SelectionSummary[];
   attachments: readonly AttachmentRef[];
+  /** dsh-file-attach 插件身份(wire inventory 解析;null = 插件未定义/未运行)。
+   *  webview 侧据此驱动插件 client half 激活并委托「建议附着」。 */
+  cordis?: { agentId: string; pluginId: string; packageId: string } | null;
 }
 
 /** 白名单结构校验:返回归一化后的请求;非法输入抛错 */

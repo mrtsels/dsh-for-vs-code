@@ -3,7 +3,7 @@
  */
 import * as vscode from 'vscode';
 import type { AgentController } from '../agent/controller.js';
-import type { HarnessRuntime } from '../agent/runtime.js';
+import type { ConnectionWrapper } from '../api/connection-wrapper.js';
 import type { SessionManager } from '../agent/session-manager.js';
 import type { Logger } from '../util/logger.js';
 import type { SnapshotWatcher } from '../vscode/workspace.js';
@@ -12,7 +12,7 @@ import type { ExtensionMessage } from '../webview/bridge.js';
 
 export interface AppContext {
   logger: Logger;
-  runtime: HarnessRuntime;
+  runtime: ConnectionWrapper;
   sessions: SessionManager;
   controller: AgentController;
   /** 主 UI 宿主(活动栏 WebviewView);open 聚焦侧边栏,post 推消息 */

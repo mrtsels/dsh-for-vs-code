@@ -126,12 +126,13 @@ export interface SessionHistoryResponse {
 export type { MuxFrame, HostFrame } from '@deepseek-ai/dsh-host-apiproxy/api'
 
 export interface HostDescription {
-  version: string;
-  cwd: string;
-  provider: string;
-  model: string;
-  attachedSessions: number;
-  canOpenPath: boolean;
+  version?: string;
+  cwd?: string;
+  provider?: string;
+  model?: string;
+  attachedSessions?: number;
+  canOpenPath?: boolean;
+  [key: string]: unknown;
 }
 
 export interface SessionSummary {

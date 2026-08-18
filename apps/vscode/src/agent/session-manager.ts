@@ -4,7 +4,7 @@
  * (events.d.ts:since 在 v1 未实现)。
  * 接线:外部把 runtime.onMuxFrame 转发到 handleMuxFrame(解决构造顺序依赖)。
  */
-import type { HarnessRuntime } from './runtime.js';
+import type { ConnectionWrapper } from '../api/connection-wrapper.js';
 import type {
   GoalView,
   JobView,
@@ -32,7 +32,7 @@ export class SessionManager {
   private readonly onMeta?: (sessionId: string, meta: { jobs?: JobView[]; projection?: { key: string; value: unknown; seq: number } }) => void;
 
   constructor(
-    private readonly runtime: HarnessRuntime,
+    private readonly runtime: ConnectionWrapper,
     options?: {
       onEvents?: (sessionId: string, events: SessionEvent[]) => void;
       onMeta?: (sessionId: string, meta: { jobs?: JobView[]; projection?: { key: string; value: unknown; seq: number } }) => void;

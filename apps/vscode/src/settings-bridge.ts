@@ -14,10 +14,12 @@
  * - 拉(实例 → VS Code):webview 可见时每 5s 轮询 settings.describe,值漂移则回写 VS Code
  *   设置(抑制标志防回环:回写触发的 change 事件不再推实例)。
  * 写回统一走 settings.update({ns, patch})(上游 store 同款信封),替代旧的 settings.mutate。
+ *
+ * M6.3: 所有 RPC 调用改用 DshWebApiClient.callMethod()。
  */
 
 import * as vscode from 'vscode';
-import { postRpc } from './rpc.js';
+import { DshWebApiClient } from './api/dsh-web-api-client.js';
 
 /** 实例 settings 命名空间与字段(与上游各插件约定一致,实测 3080) */
 const THEME_NS = 'ui-theme';
@@ -33,16 +35,18 @@ export type BusyEnterSetting = 'queue' | 'steer';
 
 /** settings.update 写一个字段;网络/实例错误返回失败信息(调用方提示) */
 export async function writeSettingField(
-  baseUrl: string,
+  api: DshWebApiClient,
   ns: string,
   field: string,
   value: string,
 ): Promise<string | undefined> {
   try {
-    const body = await postRpc(baseUrl, 'settings.update', { ns, patch: { [field]: value } });
-    if (body?.result?.ok === true) return undefined;
-    const message = (body?.result as { error?: { message?: string } } | undefined)?.error?.message;
-    return message ?? '实例拒绝该设置';
+    const resp = await api.callMethod<{ ok?: boolean; error?: { message?: string } }>(
+      'settings.update',
+      { ns, patch: { [field]: value } },
+    );
+    if (resp.result.ok === true) return undefined;
+    return resp.result.error?.message ?? '实例拒绝该设置';
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
@@ -50,15 +54,16 @@ export async function writeSettingField(
 
 /** settings.describe 当前生效值(某命名空间某字段);失败 undefined */
 async function readSettingField(
-  baseUrl: string,
+  api: DshWebApiClient,
   ns: string,
   field: string,
 ): Promise<string | undefined> {
   try {
-    const body = await postRpc(baseUrl, 'settings.describe', {});
-    const namespaces = (body?.result?.value as
-      | { namespaces?: Array<{ ns: string; value?: Record<string, unknown> }> }
-      | undefined)?.namespaces;
+    const resp = await api.callMethod<{ namespaces?: Array<{ ns: string; value?: Record<string, unknown> }> }>(
+      'settings.describe',
+      {},
+    );
+    const namespaces = resp.result.value?.namespaces;
     const hit = namespaces?.find((n) => n.ns === ns)?.value?.[field];
     return typeof hit === 'string' ? hit : undefined;
   } catch {
@@ -67,12 +72,10 @@ async function readSettingField(
 }
 
 /** agentPreset 名册(校验用);失败 undefined */
-export async function readAgentPresetRoster(baseUrl: string): Promise<readonly string[] | undefined> {
+export async function readAgentPresetRoster(api: DshWebApiClient): Promise<readonly string[] | undefined> {
   try {
-    const body = await postRpc(baseUrl, 'agentPreset.list', {});
-    const presets = (body?.result?.value as
-      | { presets?: Array<{ id: string }> }
-      | undefined)?.presets;
+    const resp = await api.callMethod<{ presets?: Array<{ id: string }> }>('agentPreset.list', {});
+    const presets = resp.result.value?.presets;
     return presets?.map((p) => p.id);
   } catch {
     return undefined;
@@ -103,14 +106,16 @@ export function registerSettingsBridge(
   const pushTheme = (): void => {
     const v = cfg<ThemeSetting>('theme', 'follow-web');
     if (v === 'follow-web') return;
-    void writeSettingField(baseUrl(), THEME_NS, 'preference', v).then((err) => {
+    const api = new DshWebApiClient(baseUrl());
+    void writeSettingField(api, THEME_NS, 'preference', v).then((err) => {
       if (err !== undefined) void vscode.window.showWarningMessage(`dsh: 无法写回实例设置(theme=${v}):${err}`);
     });
   };
   const pushLocale = (): void => {
     const v = cfg<LocaleSetting>('locale', 'follow-web');
     if (v === 'follow-web') return;
-    void writeSettingField(baseUrl(), LOCALE_NS, 'preference', v).then((err) => {
+    const api = new DshWebApiClient(baseUrl());
+    void writeSettingField(api, LOCALE_NS, 'preference', v).then((err) => {
       if (err !== undefined) {
         void vscode.window.showWarningMessage(`dsh: 无法写回实例设置(locale=${v}):${err}`);
         return;
@@ -139,7 +144,8 @@ export function registerSettingsBridge(
         return;
       }
     }
-    const err = await writeSettingField(baseUrl(), PERMISSION_NS, 'defaultPreset', next);
+    const api = new DshWebApiClient(baseUrl());
+    const err = await writeSettingField(api, PERMISSION_NS, 'defaultPreset', next);
     if (err !== undefined) {
       void vscode.window.showWarningMessage(`dsh: 无法写回实例权限设置(permissionMode=${next}):${err}`);
     }
@@ -148,14 +154,15 @@ export function registerSettingsBridge(
     if (applyingExternal) return;
     const next = cfg<string>('agentPreset', '');
     if (next === '') return; // 空 = 跟随实例当前默认,不写回
-    const roster = await readAgentPresetRoster(baseUrl());
+    const api = new DshWebApiClient(baseUrl());
+    const roster = await readAgentPresetRoster(api);
     if (roster !== undefined && !roster.includes(next)) {
       void vscode.window.showWarningMessage(
         `dsh: agent preset "${next}" 不在实例名册中(可用:${roster.join(' / ')})`,
       );
       return;
     }
-    const err = await writeSettingField(baseUrl(), AGENT_PRESET_NS, 'default', next);
+    const err = await writeSettingField(api, AGENT_PRESET_NS, 'default', next);
     if (err !== undefined) {
       void vscode.window.showWarningMessage(`dsh: 无法写回实例设置(agentPreset=${next}):${err}`);
     }
@@ -163,7 +170,8 @@ export function registerSettingsBridge(
   const pushBusyEnter = (): void => {
     if (applyingExternal) return;
     const v = cfg<BusyEnterSetting>('busyEnter', 'queue');
-    void writeSettingField(baseUrl(), CONVERSATION_NS, 'busyEnter', v).then((err) => {
+    const api = new DshWebApiClient(baseUrl());
+    void writeSettingField(api, CONVERSATION_NS, 'busyEnter', v).then((err) => {
       if (err !== undefined) void vscode.window.showWarningMessage(`dsh: 无法写回实例设置(busyEnter=${v}):${err}`);
     });
   };
@@ -179,13 +187,13 @@ export function registerSettingsBridge(
   // 反向轮询:webview 可见时每 5s 读实例设置,漂移则回写 VS Code(抑制回环)
   const poll = async (): Promise<void> => {
     if (!isVisible()) return;
-    const url = baseUrl();
+    const api = new DshWebApiClient(baseUrl());
     const [theme, locale, permission, preset, busyEnter] = await Promise.all([
-      readSettingField(url, THEME_NS, 'preference'),
-      readSettingField(url, LOCALE_NS, 'preference'),
-      readSettingField(url, PERMISSION_NS, 'defaultPreset'),
-      readSettingField(url, AGENT_PRESET_NS, 'default'),
-      readSettingField(url, CONVERSATION_NS, 'busyEnter'),
+      readSettingField(api, THEME_NS, 'preference'),
+      readSettingField(api, LOCALE_NS, 'preference'),
+      readSettingField(api, PERMISSION_NS, 'defaultPreset'),
+      readSettingField(api, AGENT_PRESET_NS, 'default'),
+      readSettingField(api, CONVERSATION_NS, 'busyEnter'),
     ]);
     const cfgRoot = vscode.workspace.getConfiguration('deepseekHarness');
     applyingExternal = true;
