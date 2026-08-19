@@ -50,15 +50,24 @@ export interface AttachmentError {
 export class ContextAttachmentManager {
   private readonly onState: (state: AttachmentState) => void;
   private readonly onError: (error: AttachmentError) => void;
+  /** wire inventory 解析 dsh-file-attach 插件身份(webview 驱动 client half 激活用) */
+  private readonly resolveCordis: () => Promise<AttachmentState['cordis']>;
   private readonly disposables: vscode.Disposable[] = [];
   private attachments: AttachmentRef[] = [];
   private activeFile: AttachmentState['activeFile'];
   private selections: readonly SelectionSummary[] = [];
   private selectionTimer: NodeJS.Timeout | undefined;
+  private cordis: AttachmentState['cordis'] = null;
+  private cordisCheckedAt = 0;
 
-  constructor(onState: (state: AttachmentState) => void, onError: (error: AttachmentError) => void) {
+  constructor(
+    onState: (state: AttachmentState) => void,
+    onError: (error: AttachmentError) => void,
+    resolveCordis: () => Promise<AttachmentState['cordis']>,
+  ) {
     this.onState = onState;
     this.onError = onError;
+    this.resolveCordis = resolveCordis;
     this.disposables.push(
       vscode.window.onDidChangeActiveTextEditor(() => this.recomputeEditor()),
       vscode.window.onDidChangeTextEditorSelection(() => this.scheduleRecomputeEditor(50)),
@@ -91,11 +100,35 @@ export class ContextAttachmentManager {
       activeFile: this.activeFile,
       selections: this.selections,
       attachments: this.attachments,
+      cordis: this.cordis,
     };
   }
 
   private pushState(): void {
+    void this.refreshCordisIfStale();
     this.onState(this.getState());
+  }
+
+  /** 立即推送当前状态(webview ready 时显式调用;触发一次 cordis 解析) */
+  pushNow(): void {
+    this.pushState();
+  }
+
+  /** cordis 身份缓存 30s 后经 wire inventory 重解析;值变化时再推一次状态
+   * (webview 据此驱动插件 client half 激活)。失败置 0 下次再试。 */
+  private async refreshCordisIfStale(): Promise<void> {
+    const now = Date.now();
+    if (this.cordisCheckedAt !== 0 && now - this.cordisCheckedAt < 30_000) return;
+    this.cordisCheckedAt = now;
+    try {
+      const next = await this.resolveCordis();
+      if (JSON.stringify(next) !== JSON.stringify(this.cordis)) {
+        this.cordis = next;
+        this.onState(this.getState());
+      }
+    } catch {
+      this.cordisCheckedAt = 0;
+    }
   }
 
   /** 编辑器变化即时刷新;选区变化 50ms 防抖(拖选产生大量事件)。 */
@@ -121,6 +154,8 @@ export class ContextAttachmentManager {
         doc.isUntitled
           ? doc.uri.toString()
           : vscode.workspace.asRelativePath(doc.uri, false) || doc.fileName,
+      // 绝对路径(插件建议附着用;untitled 无 fsPath 置空,webview 侧跳过建议)
+      fsPath: doc.isUntitled ? '' : doc.uri.fsPath,
       languageId: doc.languageId,
       isDirty: doc.isDirty,
       isUntitled: doc.isUntitled,

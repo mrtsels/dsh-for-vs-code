@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SessionManager } from '../src/agent/session-manager.js';
-import type { HarnessRuntime } from '../src/agent/runtime.js';
+import type { ConnectionWrapper } from '../src/api/connection-wrapper.js';
 import type { MuxFrame, SessionEvent } from '../src/agent/wire.js';
 /** 测试 helper: string → branded SessionId (cast for test) */
 const sid = (s: string) => s as any;
@@ -15,7 +15,7 @@ const mockRuntime = {
     }
     return { ok: false as const, error: { code: 'internal', message: 'unexpected', details: {} } };
   },
-} as unknown as HarnessRuntime;
+} as unknown as ConnectionWrapper;
 
 /** 测试 helper：用 as SessionEvent 绕过精确 mapped type */
 const ev = (partial: Record<string, unknown>): SessionEvent =>
@@ -100,7 +100,7 @@ describe('SessionManager 事件缓冲', () => {
         }
         return { ok: false as const, error: { code: 'internal', message: 'unexpected', details: {} } };
       },
-    } as unknown as HarnessRuntime;
+    } as unknown as ConnectionWrapper;
     const sm = new SessionManager(runtime);
     await sm.seedHistory('s1');
     expect(sm.goal('s1')?.goal.objective).toBe('恢复目标');
