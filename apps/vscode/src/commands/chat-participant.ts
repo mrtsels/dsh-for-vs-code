@@ -103,7 +103,7 @@ export function registerChatParticipant(ctx: AppContext): vscode.Disposable {
       }
     },
   );
-  participant.iconPath = vscode.Uri.joinPath(ctx.extensionUri, 'media', 'deepseek.svg');
+  participant.iconPath = vscode.Uri.joinPath(ctx.extensionUri, 'media', 'icon.svg');
   // followup 建议(官方 chat-sample 模式):一轮结束后提供继续/新建会话
   participant.followupProvider = {
     provideFollowups(_result, _context, _token): vscode.ChatFollowup[] {

@@ -1,11 +1,39 @@
 {
-  "name": "dsh-for-vscode",
-  "displayName": "DeepSeek Harness for VS Code",
-  "description": "DeepSeek Harness 的 VS Code 客户端:映射现有 dsh web 实例(127.0.0.1:3080)的 Agent UI",
-  "version": "0.0.1",
+  "name": "dsh-for-vs-code",
+  "displayName": "DSH Native Sidebar",
+  "description": "VS Code client for DeepSeek Harness — connects to a running dsh web instance (127.0.0.1:3080) and brings the full Agent UI into your IDE",
+  "version": "0.1.0",
   "publisher": "mrtsels",
+  "author": {
+    "name": "Alex Xie",
+    "url": "https://github.com/mrtsels"
+  },
+  "keywords": [
+    "deepseek",
+    "ai",
+    "agent",
+    "chat",
+    "harness",
+    "code-generation",
+    "copilot",
+    "llm",
+    "gpt",
+    "coding-assistant",
+    "ai-assistant",
+    "code-completion",
+    "pair-programming",
+    "developer-tools"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "homepage": "https://github.com/mrtsels/dsh-for-vs-code#readme",
+  "bugs": {
+    "url": "https://github.com/mrtsels/dsh-for-vs-code/issues"
+  },
   "license": "MIT",
-  "private": true,
+  "icon": "media/icon.png",
+  "private": false,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mrtsels/dsh-for-vs-code.git"
@@ -15,6 +43,9 @@
   "engines": {
     "vscode": "^1.95.0"
   },
+  "extensionKind": [
+    "workspace"
+  ],
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -197,7 +228,7 @@
         {
           "id": "deepseekHarness",
           "title": "DeepSeek",
-          "icon": "media/deepseek.svg"
+          "icon": "media/icon.png"
         }
       ]
     },
@@ -206,12 +237,14 @@
         {
           "type": "webview",
           "id": "deepseekHarness.chat",
-          "name": "Chat"
+          "name": "Chat",
+          "icon": "media/icon.png"
         }
       ]
     }
   },
   "scripts": {
+    "vscode:prepublish": "pnpm run build && pnpm run build:shell",
     "build": "node scripts/build.mjs",
     "build:shell": "node scripts/build-web-shell.mjs",
     "watch": "node scripts/build.mjs --watch",
