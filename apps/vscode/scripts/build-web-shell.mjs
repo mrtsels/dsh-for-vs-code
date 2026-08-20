@@ -744,6 +744,9 @@ const BRIDGE_JS = `(() => {
         let view = 'chat';
         try { view = localStorage.getItem(VIEW_KEY) === 'sessions' ? 'sessions' : 'chat'; } catch (err) {}
         setView(view);
+        // 补偿:DOMContentLoaded 时 _titleRow 可能未渲染,ensureBackButton 错过注入;
+        // root 就绪后 _titleRow 大概率已渲染,立即补偿一次
+        ensureBackButton();
         // 语言对齐:boot 后 2s 立即尝试一次(优先 setLocale 桥),之后周期检测
         window.setTimeout(() => {
           const target = window.__DSH_LOCALE__;

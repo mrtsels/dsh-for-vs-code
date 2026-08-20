@@ -144,6 +144,25 @@ function pluginActive(): boolean {
   return pluginSuggestApi() !== undefined;
 }
 
+/**
+ * 上游 ui-attachment 插件(rc.8+)是否可能已激活。
+ *
+ * 该插件注册 conversation.input.attachments slot，其 ComposerAttachments
+ * 组件渲染 AttachmentRail / DropOverlay。检测策略：composer seat
+ * ([data-composer-seat])内存在非扩展注入的子节点 = 上游 slot occupant 已渲染。
+ *
+ * 误判 active → 扩展让出 Files 处理权,用户通过上游 UI 操作(可接受)
+ * 误判 inactive → 扩展拦截 Files,上游收不到(需避免)
+ * 因此宁可误判 active(保守侧)。
+ */
+function upstreamAttachmentActive(): boolean {
+  const seat = document.querySelector('[data-composer-seat]');
+  if (seat === null) return false;
+  const extRoot = seat.querySelector('#dsh-attachment-root');
+  const extChildCount = extRoot !== null ? 1 : 0;
+  return seat.children.length > extChildCount;
+}
+
 /** 确保 dsh-file-attach 插件 client half 在本页加载,加载成功后返回 true。
  *  先等 __dshCordisEnsureClient 桥就绪(boot 竞态),再触发 startUserRun(已运行则宿主
  *  零重启挂接),最后等 window.__dshFileAttach 落地(插件 apply 内设置)。
@@ -333,6 +352,12 @@ function isSupportedDrop(dt: DataTransfer | null): boolean {
   return types.includes(URI_LIST_MIME) || types.includes('Files');
 }
 
+/** 仅 text/uri-list(Explorer 拖入;扩展独占处理,上游不处理此 MIME) */
+function isUriListDrop(dt: DataTransfer | null): boolean {
+  if (dt === null) return false;
+  return typesOf(dt).includes(URI_LIST_MIME);
+}
+
 /* ---- OS 拖入尽力取本地路径(webUtils feature-detect,非 VS Code API 合约)---- */
 function tryGetLocalPath(file: File): string | undefined {
   const webUtils = (globalThis as typeof globalThis & { webUtils?: { getPathForFile?: (f: File) => string } }).webUtils;
@@ -447,11 +472,7 @@ function ensureRoot(): HTMLElement | null {
 
 function renderState(state: AttachmentState): void {
   lastState = state;
-  const el = ensureRoot();
-  if (el === null || !el.isConnected) return;
-  const toolbar = el.querySelector('.dsh-attach-toolbar');
-  const files = el.querySelector('.dsh-attach-files');
-  let hasContent = false;
+  // ---- 全局变量 + 建议(不依赖 DOM;headless 无 composer seat 时也必须写入) ----
   // 活动文件:**弃用自绘指示** —— 仅委托插件「建议附着」(虚线 chip + 「+」正式附着)。
   // 插件 client 未激活时先驱动激活:身份来源 = 扩展推送的 state.cordis,缺失则经代理自行
   // 解析(兼容旧扩展进程);落地后重推建议。
@@ -489,6 +510,12 @@ function renderState(state: AttachmentState): void {
       });
     }
   }
+  // ---- DOM 渲染(需要 composer seat 存在) ----
+  const el = ensureRoot();
+  if (el === null || !el.isConnected) return;
+  const toolbar = el.querySelector('.dsh-attach-toolbar');
+  const files = el.querySelector('.dsh-attach-files');
+  let hasContent = false;
   // 拖入文件 chip:插件激活时隐藏(插件自身渲染附着 chips,paste/drop 由插件接管,
   // 避免双份 chip / 双重附着);插件缺失时保留本页渲染(原生 ask 路径仍走扩展)。
   if (files instanceof HTMLElement) {
@@ -548,14 +575,17 @@ function inSessions(): boolean {
 
 function onDragEnter(event: DragEvent): void {
   // 插件激活时拖放由插件接管(composer 内自动附着 + 渲染 chips),扩展不再拦截
-  if (pluginActive() || inSessions() || !isSupportedDrop(event.dataTransfer)) return;
+  if (pluginActive() || inSessions()) return;
+  // rc.8: 只拦截 Explorer text/uri-list;Files 让给上游 ui-attachment 插件
+  if (!isUriListDrop(event.dataTransfer)) return;
   event.preventDefault();
   event.stopPropagation();
   document.body.classList.add('dsh-dragging');
 }
 
 function onDragOver(event: DragEvent): void {
-  if (pluginActive() || inSessions() || !isSupportedDrop(event.dataTransfer)) return;
+  if (pluginActive() || inSessions()) return;
+  if (!isUriListDrop(event.dataTransfer)) return;
   event.preventDefault();
   event.stopPropagation();
   if (event.dataTransfer !== null) event.dataTransfer.dropEffect = 'copy';
@@ -563,6 +593,9 @@ function onDragOver(event: DragEvent): void {
 
 function onDragLeave(event: DragEvent): void {
   if (pluginActive()) return;
+  // 只有扩展自己添加了 dsh-dragging class 时才需要清理
+  // (onDragEnter 现在只对 text/uri-list 添加,Files 不再添加)
+  if (!document.body.classList.contains('dsh-dragging')) return;
   const related = event.relatedTarget;
   if (related === null || !(related instanceof Node) || !document.body.contains(related)) {
     document.body.classList.remove('dsh-dragging');
@@ -575,6 +608,7 @@ function onDrop(event: DragEvent): void {
   const dt = event.dataTransfer;
   if (dt === null) return;
   // Explorer / Tree View:text/uri-list(标准 MIME)
+  // 扩展独占:上游 ui-attachment 插件不处理此 MIME
   const uriList = dt.getData(URI_LIST_MIME);
   if (uriList !== '') {
     const uris = parseUriList(uriList);
@@ -584,7 +618,13 @@ function onDrop(event: DragEvent): void {
     postToHost({ type: 'dsh:attachments:add', attachments: uris.map((uri) => ({ uri })) });
     return;
   }
-  // OS 桌面:尽力取本地路径(webUtils feature-detect);拿不到明确降级提示
+  // OS 桌面:Files — rc.8 新增守卫
+  // 上游 ui-attachment 插件的 ComposerAttachments 注册了 document 级
+  // bubble handler 处理 Files,渲染 AttachmentRail + 图片预览。
+  // 若上游可能活跃,让出处理权(不 preventDefault/stopPropagation),
+  // 使事件继续 bubble 到上游 handler。
+  if (upstreamAttachmentActive()) return;
+  // 兜底:上游未激活时扩展接管 Files 处理(与 rc.7 行为一致)
   const files = Array.from(dt.files);
   if (files.length === 0) return;
   const first = tryGetLocalPath(files[0]!);
