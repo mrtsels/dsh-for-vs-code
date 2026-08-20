@@ -25,7 +25,7 @@ DeepSeek Harness（`dsh`）的 VS Code 客户端：复用上游 Agent Runtime / 
 
 ## 协议与版本
 
-- **锁 dsh 版本**（运行时 0.1.0-rc.6 @ 3080；UI 源码 rev rc.7 = `99f6f02`，记入 docs/versions.md）；升级只做专项 + 全量回归（R1/R4）
+- **锁 dsh 版本**（运行时 0.1.0-rc.7 @ 3080；UI 源码 rev rc.7 = `99f6f02`，记入 docs/versions.md）；升级只做专项 + 全量回归（R1/R4）
 - 端点 `POST /api/<method>`（裸 `/api` 404）；信封 `{type:"client-request", rpcId, method, payload}` → `server-response`；WS 帧为 `server-request`（host→client）。协议细节见 `docs/http-bridge.md`
 - 服务仅绑 127.0.0.1、无鉴权：禁 `--host 0.0.0.0`；信任栅栏 loopback / `trustedHosts`，失败 403
 - 实例 cwd 绑定：握手后对比 `host.describe.cwd` 与工作区，不一致必须警告（P1-15）
@@ -33,14 +33,14 @@ DeepSeek Harness（`dsh`）的 VS Code 客户端：复用上游 Agent Runtime / 
 
 ## 工具链
 
-- 环境：node `^22.19 || >=24`；本机 node v22.22.3 / pnpm 10.32.1（外层）/ corepack pnpm 11.7.0（vendor）/ dsh 0.1.0-rc.6
+- 环境：node `^22.19 || >=24`；本机 node v22.22.3 / pnpm 10.32.1（外层）/ corepack pnpm 11.7.0（vendor）/ dsh 0.1.0-rc.7
 - 服务：`npx @deepseek-ai/dsh web` → http://127.0.0.1:3080；健康检查 `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3080/`（不靠浏览器）
 - **G0 提交门**（commit 前全绿）：`pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build`
 - **vendor 构建**（在 `vendor/deepseek-harness/` 内执行，产物不入外层 workspace）：
   `corepack pnpm install --ignore-scripts`（lefthook postinstall 在 submodule 下失败，与构建无关）→
   `corepack pnpm run build:lib:host`（typert 契约，client 类型依赖）→ `build:lib:client` + `build:web`；
   UI 装配：`pnpm --filter dsh-for-vscode run build:shell`（即 build-web-shell.mjs）
-- **vendor 源码更新后必须 rebuild lib 产物**：`build-web-shell.mjs` 从 `vendor/lib/client.js` 拷贝插件，不从源码构建。只改 vendor 源码不 rebuild → shell 产物仍是旧版（已踩坑：rc.7 源码已 rename "code" → "PTC"，但 lib 产物仍是 "Code mode"）。正确流程：`corepack pnpm run build:lib:client` → `pnpm build:shell`
+- **vendor 源码更新后必须 rebuild lib 产物**：`build-web-shell.mjs` 从 `vendor/lib/client.js` 拷贝插件，不从源码构建。只改 vendor 源码不 rebuild → shell 产物仍是旧版（已踩坑：源码已 rename 但 lib 产物仍是旧版）。正确流程：`corepack pnpm run build:lib:client` → `pnpm build:shell`
 - 冒烟：`node apps/vscode/scripts/smoke-shell.mjs`（headless Chrome + Origin 中继，断言语义见脚本）
 - 测试：连 3080 的集成测试标 `@live`（需 `LIVE_3080=1` 环境变量才跑），无服务/无 key 时可跳过且保持全绿
 - git：只 `git add <具体路径>`，禁 `add .` / `-A`；commit 后立即 push；信息用 `feat|fix|chore|refactor|docs:` 前缀
@@ -50,7 +50,7 @@ DeepSeek Harness（`dsh`）的 VS Code 客户端：复用上游 Agent Runtime / 
 ### 基础环境
 - `dsh web` 不自动开浏览器，只打印 URL；前台进程，后台实例随会话结束而死
 - headless/未配模型（`agent-default-model` / `DEEPSEEK_API_KEY`）退出码 1；headless 无 JSON 输出，stdout 即答案
-- dev preview：上游 master（rc.5）与已装版本（rc.6）可能不一致，以 `dsh --version` 实测为准
+- dev preview：上游 master 与已装版本可能不一致，以 `dsh --version` 实测为准
 - 上游约定：注册即 effect；model-visible ⟺ logged；插件而非改 loop；misconfiguration 启动即报错，不静默跳过
 - `references/` 已 gitignore（本地才有设计草案），公开仓库见不到属正常；执行基准是 TASK.md
 
@@ -67,14 +67,14 @@ DeepSeek Harness（`dsh`）的 VS Code 客户端：复用上游 Agent Runtime / 
 - **裁剪图参考**（`scripts/ref-graph-rc6.json`）
   - 裁剪模式与参考集做精确断言
   - 上游新增/改名 client 包会触发失败——有意变更则同步更新参考
-- **mux 存在二进制帧**：上游客户端（rc.5/rc.6 一致）丢弃非文本帧，属已知行为非回归；UI 依赖的帧均为文本
+- **mux 存在二进制帧**：上游客户端丢弃非文本帧，属已知行为非回归；UI 依赖的帧均为文本
 - **vendor 类型导入基础设施**（2026-08-18）
   - tsconfig paths + esbuild alias 配置了 4 个 vendor 包的解析路径
   - 扩展侧代码可通过标准 import 引入上游类型
   - **当前 wire.ts 保留本地类型定义**（上游更精确：branded RpcId、非泛型 RpcResult、discriminated MuxFrame），仅记录映射关系
   - 直接 re-export 会导致消费者类型不兼容。迁移策略见 docs/dedup-plan.md
 - `/plugins/events`（HMR dev SSE）在无 dev server 时 404，无害
-- 上游 rc.5 源码构建产物与 rc.6 npm 产物字节级一致（实测），UI 侧协议漂移风险低；升级仍须全量回归
+- 上游源码构建产物与 npm 产物字节级一致（实测），UI 侧协议漂移风险低；升级仍须全量回归
 
 ### Webview 桥接
 - **webview 内「新会话」走扩展**
@@ -87,15 +87,8 @@ DeepSeek Harness（`dsh`）的 VS Code 客户端：复用上游 Agent Runtime / 
   - 空会话 hero 无 title 行 → fixed 悬浮兜底
   - Workspaces 页顶部 fixed 返回
 - **webview 内 acquireVsCodeApi 只能 acquire 一次**（2026-08-20 实测根因）
-  - VS Code 预加载脚本对第二次调用抛 'An instance of the VS Code API has already been acquired'
-  - 二次 acquire 失败后的 window.parent.postMessage 回退在真实 webview 是**自我投递（静默丢弃）**
-  - headless 能过只因 harness 帧真的接收
-  - 自建 React 视图回传宿主必须走 `window.__dshBridge.postToHost`（bridge.js 在 head 持有唯一 acquire）
-- **VS Code webview 默认样式给 body 注入 `padding: 0 20px`**（2026-08 实测）
-  - `@layer vscode-default` 是 VS Code 在 webview 文档加载后插入的默认样式
-  - 透明 padding 区会露出宿主深色背景 → 页面两侧「黑边」（headless 无此注入，复现必须模拟）
-  - 修复：shell.css 顶部 `body { padding: 0 !important; }`（unlayered 规则压过 layer）
-  - 改 `@layer` 里任何默认行为后，记得核对 vscode-default 全文
+  - VS Code 预加载脚本对第二次调用抛异常，自建 React 视图回传宿主必须走 `window.__dshBridge.postToHost`（bridge.js 在 head 持有唯一 acquire）
+- **VS Code webview 默认样式给 body 注入 `padding: 0 20px`**：已在 shell.css 修复（`body { padding: 0 !important; }`）。改 `@layer` 里任何默认行为后，记得核对 vscode-default 全文
 
 ### 上游 UI 定制
 - **heroGlow 是硬编码 SVG 色**（#6187D8，不读 token）
@@ -112,30 +105,13 @@ DeepSeek Harness（`dsh`）的 VS Code 客户端：复用上游 Agent Runtime / 
   - Route A 排除 browse、保留 native；native occupant 不渲染任何 UI，直接调 `host.pickDirectory` RPC
   - → proxy 拦截 → `vscode.window.showOpenDialog()` → 返回路径
   - **不要拦截 `host.listDirectory`**（语义是列出目录内容，不是选择目录）
-- **会话管理页 = 扩展自有 React 视图**（2026-08-19 起，取代拉伸侧边栏）
-  - 上游没有独立会话管理页（WorkspaceBrowser 就是侧边栏），且其 store 在 React context 内不可外部调用
-  - 方案 = web/SessionView.tsx（esbuild IIFE → dist/web/session-view.js，由 build-web-shell.mjs 拷入 dsh-shell）
-  - bridge 切 `chat`↔`sessions`（sessions 隐藏 #root=display:none 保 store、显示自有页）
-  - 数据走 `__DSH_WEB_URL__` 代理调 session.list RPC；跳转 = 写 dsh.sessions.current + 回传 switch-session:applied
-  - 子代理嵌套父行（递归折叠），行尾 ⋯ 菜单 = 重命名/分叉/归档
-  - 改 vendor rev 后若注入或拷贝失败，先看装配产物再更新脚本（验证：dist/web/dsh-shell/index.html 的 `</body>` 前）
 
 ### Locale 同步
-- **locale 由 settings 快照决定，但 boot 加载是竞态**（实测）
-  - connection 未就绪时上游 settings.describe 失败 → 快照 undefined → 语言 = navigator.language
-  - 且实例值已等于目标时无推送可触发 → 永不纠正
-  - 修复：注入 `__DSH_LOCALE__`（VS Code 设置），bridge 检测 UI 语言 → 不符则写实例触发推送
-  - 值相同用「双写对调值再写回」强制推送
-- **locale 运行中不热切换**（实测）
-  - settings.update 写 locale.preference 后，已打开的 webview 界面语言不变（仅 boot 时应用）
-  - 扩展在写回成功后重载 webview（settings-bridge onLocaleApplied → chat-panel reload）
-  - 语言对齐主通道 = bridge 的 `__DSH_LOCALE__` 同步（boot 后自动，无需 reload）
+- **locale boot 竞态已修复**：注入 `__DSH_LOCALE__`（VS Code 设置），bridge 检测 UI 语言 → 不符则 settings.update 写回触发推送
+- **locale 运行中不热切换已修复**：settings.update 写 locale.preference 后扩展重载 webview；主通道 = bridge 的 `__DSH_LOCALE__` 同步（boot 后自动）
 
 ### 注入脚本陷阱
-- **MutationObserver 必须防自激循环**（2026-08-21 实测）
-  - 观察 body 子树的 MutationObserver 若在回调里无条件重渲染（即使 DOM 未变）→ rAF 级无限循环
-  - 守卫：回调里只在「注入根丢失」（root 未 connected）时才重建+重渲染；根存在则直接跳过
-  - 附着 UI（web/dsh-attachment-ui.ts）即此范式；title 行注入只做幂等查询不写 DOM，不受影响
+- **MutationObserver 自激循环已加守卫**：回调里只在「注入根丢失」（root 未 connected）时才重建+重渲染；附着 UI（web/dsh-attachment-ui.ts）即此范式；title 行注入只做幂等查询不写 DOM，不受影响
 
 ### 附着系统（Phase 10）
 - **拖放 MIME**
