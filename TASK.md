@@ -1,297 +1,107 @@
-# TASK.md — dsh-for-vs-code 实施任务书(2026-08-17 重写:Route A 源码构建路线)
+# TASK.md — dsh-for-vs-code 实施任务书
 
-> **进度快照(2026-08-18 Phase 9)**:Phase 5 ✅ / 6 ✅ / 7 🔶(P7-1 人工回归待用户)/ 8 🔶(G1 PASS)。
-> **Phase 10(2026-08-21 用户需求,实施完成待冒烟/人工)**:VS Code 原生文件/选区附着 ——
-> 1) Explorer 文件原生拖入 webview 附着(text/uri-list;目录拒绝/1MiB/20k/100k 上限);
-> 2) 可选附着活动文件(deepseekHarness.context.attachActiveFile,发送瞬间快照含未保存改动);
-> 3) 可选附着活动选区(attachSelection,实时状态 + 多光标 + 整文件去重)。
-> 按高级模型规格实现(bridge 白名单 + context-attachments 管理器 + attachment-format 纯函数 +
-> web/dsh-attachment-ui.ts 注入 UI + shell 装配注入);G0 四门绿;手动清单 docs/manual-tests/phase-10.md。
-> **Phase 9(UI/UX 定制)**:P9-1 ✅(仅对话面板 + Workspaces 页;返回按钮改 body 固定悬浮,
-> React 重渲染不清除)、P9-2 ✅(仅 Chat 视图)、P9-3 ✅(--dsw-* 全量映射 VS Code 变量 +
-> heroGlow 蓝色 SVG 覆盖)、P9-4 ✅(bootstrap 模块 + __DSH_BOOT_SESSION__)、
-> P9-5 ✅(设置桥:agentPreset/busyEnter 新增,permission 修正 defaultPreset,双向轮询 +
-> 语言生效重载)、P9-6 ✅(G0 四门 + @live 57/57 + smoke PASS + vision 验证三视图)。
-> 用户反馈迭代(2026-08-18):Workspaces 页改**全宽单栏独立页面**(非 sidebar 形态,内容
-> 撑满全宽 —— 覆盖 SidebarRoot 内联 width)、logo(wordmark)保留、返回按钮 = 空心会话气泡
-> **放回 session title 行内**(rAF 重插 + document 委托防 React 清除)、Deep diving 状态行
-> 改强调色渐变(background-image 覆盖,保留 background-clip:text 文字可见)、语言映射
-> 生效(写回后重载 webview;实测 locale=zh 覆盖 placeholder/统计/标签/后台任务全字段;
-> 每次 webview ready 按 VS Code 设置强制对齐实例 locale,改设置必生效)。
-> Workspaces 撑满根因修正:SidebarRoot 根是 root+quietBars 双类,属性选择器按整个 class 值
-> 匹配会漏 —— 改用词尾含空格匹配,设 width:100% 真正撑满。
-> 语言根因(2026-08-18 实测):webview boot 时 connection 未就绪 → 上游 settings 快照加载
-> 失败 → locale 用浏览器语言(navigator.language,中文系统=中文),且值相同时无推送不纠正。
-> 修复:注入 __DSH_LOCALE__(VS Code 设置),boot 桥检测 UI 语言(tab 文本)→ 不符则写实例
-> (值不同单写/值相同双写对调再写回)触发推送 → 上游热切换,无需 reload。
-> 会话管理页"全部跳转"确认(2026-08-18):workspace 行点击由"展开"改为跳转
-> (dsh:open-workspace 按标题匹配 → 复用 blank/最近会话或新建);列表默认全部展开、
-> 展开箭头隐藏 —— 页面上任何交互(返回/会话行/workspace 行/+ 按钮/新会话)均为页面跳转,
-> 无派生交互(唯一例外:workspace 行 ... 管理菜单)。
-> 会话管理页重构(2026-08-19,用户提供 ChatGPT 详细规格):放弃"拉伸侧边栏成整页"方案
-> (依赖 #root 撑宽到 1100px 骗过 SIDEBAR_AUTO_COLLAPSE=1024、frame 网格挤单栏、隐藏
-> chevron/强制展开 —— 本质仍是 sidebar 形态,窄侧边栏横向溢出)。改为**扩展自有 React 视图**
-> web/SessionView.tsx(web/session-view-main.tsx → dist/web/session-view.js,esbuild IIFE,
-> 由 build-web-shell.mjs 拷入 dsh-shell 并注入 #dsh-sessions-root):
-> - 独立单栏页面,宽度 100% 自适应(320~1400px 无横向滚动);header = 返回 + BrandWordmark
->   logo(与上游 ui-primitives 同源 SVG)+ 新建会话;主体 = 扁平会话列表(整行可点);
-> - 数据与上游同源:经 __DSH_WEB_URL__ 代理调 session.list RPC(标题取 projections.values.title,
->   blank 显示"新会话");无本地缓存/硬编码;
-> - 跳转即点即走:点击会话行 → 写 dsh.sessions.current(上游恢复键)→ 回传 switch-session:applied
->   → 扩展重载 webview → boot 进入该会话(与 dsh:bootstrap-session 同一机制;无 setTimeout、
->   不依赖 workspace 展开/workspace 树);
-> - 视图切换由 bridge 控制(chat ↔ sessions):sessions 模式隐藏 #root(display:none,React
->   树保持挂载 store 不丢)、显示 #dsh-sessions-root;React 页经 __dshBridge.setView 返回;
-> - 移除:body.dsh-workspaces 全部 CSS(撑宽/网格/logoRow 让位/chevron)、expandAllWorkspaces、
->   workspace 行/会话行拦截、400ms 延时返回、dsh:open-workspace 消息与扩展 handler。
-> 冒烟(smoke-shell.mjs)相应重写:586px 会话页无横向滚动、header/logo/新建按钮、会话行点击
-> 立即回传 switch-session:applied 并写恢复键、header 返回切回对话、320px 窄宽无溢出。
-> 待用户:扩展宿主窗口视觉确认(双击 启动扩展.command)。
-> 会话切换失效根因与修复(2026-08-20,P0):真实 webview 点击会话"无反应"。根因 =
-> SessionView.tsx 的 postToHost 二次调用 acquireVsCodeApi(每个 webview 只能 acquire 一次,
-> 第二次抛异常)→ 回退 window.parent.postMessage → 但 VS Code 已把 window.parent 指向自身,
-> 消息自我投递静默丢弃;headless 测试恰好走回退路径且 harness 帧真接收,故测试绿、真实环境
-> 死。修复 = postToHost 改经 window.__dshBridge.postToHost(bridge 持有唯一 acquire);
-> 独立调试环境无 bridge 时才回退 window.parent.postMessage。已按 VS Code 预加载源码
-> (pre/index.html)验证 once-guard 行为。
-> 分组 + 状态 + 归档折叠(2026-08-20,P1+P2):按 GPT 方案移植 presentation 而非组件。
-> - 数据:session.list + workspace.list 并行拉取;workspace.list.sessionIds 反向索引分组,
->   无归属进"未分组",archivedSessionIds 进"已归档"段(默认折叠 + 计数);
->   归档/子代理(origin=subagent)/非当前 blank 会话按上游 sessionVisible 语义隐藏;
-> - 状态:session.list 项仅 running 可用(上游 pendingInteraction/completed/
->   runningSubagentCount 是 live store 字段,RPC 无)→ 运行中行显示官方状态点 + "进行中";
-> - 视觉:行结构(状态点槽 + 标题 + 元信息)、段头(三角箭头 + 文件夹图标 + 标题 + 计数)、
->   相对时间(刚刚/{n}分钟/{n}小时/{n}天/{n}个月/{n}年)、图标 SVG 均自上游
->   ui-workspace Rows.tsx / ui-primitives 提取移植(不依赖 CSS Modules);
-> - 归档 RPC 确认为 workspace.archiveSession(右键菜单暂未做,后续迭代);
-> 三问题实现(2026-08-20,P0+P1):1) 新建会话不进入对话 —— 根因:bridge 的
-> bootstrap/switch-session 处理只写 dsh.sessions.current,不重置 dsh.ui.view=chat,从会话页
-> 新建后重载仍回会话页(行点击跳转在 React 页显式写 view 所以正常)。修复:bridge 监听里
-> 两个键一起写后再回传 switch-session:applied;会话页补扩展 error 消息横幅(ensureFolderSession
-> 失败不再静默)。2) 子代理嵌套 —— 仅 origin==='subagent' 按 parentSessionId 挂父行(递归、
-> 可折叠、默认展开);fork 子代维持顶层语义(不嵌套);父不可见时子代理提升到未分组。
-> 3) 行操作菜单(⋯)= 重命名(session.rename)/ 分叉(session.fork {sessionId})/ 归档
-> (workspace.archiveSession {sessionId});会话级无 delete(上游无此 RPC);自绘 menu +
-> 重命名 Modal(不依赖 vendor Menu/Modal),成功后重新拉取数据。
+> **当前进度**：Phase 5–10 全部完成。UI 路线 = Route A（vendor 源码构建）。
 
-> 本版重写原因(2026-08-17 用户决策):
->
-> 1. **执行基准漂移**:08-15 版(Phase 5–8,vendor submodule + 定制 boot 图)方向正确,但此后实际走了
->    "fetch dist + 注入 boot 桥"路线(fetch-dsh-ui.mjs),TASK.md 未同步、checkbox 全空;README(Phase 0–4)
->    与 refactor-requirements(P0/P1/P2)又各是一套进度说法。
-> 2. **fetch+boot 被判定不靠谱**(用户决策,对比 references/deepseek-harness-vscode 112GT 路线后):
->    产物对着活 3080 抓取、不可复现;debugBridge 以模板字符串注入上游 minified shell(转义坑已两次咬人,
->    见 AGENTS.md Pitfalls);背景透明靠 getComputedStyle DOM 启发式;webview 直连撞 Origin 栅栏要靠
->    扩展侧代理改写。**决策:改为 Route A —— 从锁定 rev 的 vendor 源码构建全部前端产物,自产
->    index.html 与 __DSH_BOOT__ 图;唯一适配缝 = connection resolveBase 断言式替换。**
-> 3. 112GT 参考路线(vendored runtime + spawn sidecar + 自研 chat UI)违反本仓库红线
->    (Route B 内嵌 runtime / X-5 API key 进扩展 / R-A2 自研 UI),不采纳其架构;仅借鉴工程骨架
->    (AgentRunner 抽象、状态机 logTail、权限三档、编辑器改动装饰 —— 后者已实现)。
+## 0. 目标
 
-## 0. 目标与路线
+VS Code 扩展作为 `dsh web`（127.0.0.1:3080）的第二个 viewer：
+**UI = dsh 原生 React 组件（vendor 源码构建）**，布局与浏览器版一致。
+不内嵌 runtime、不另起实例、API key 不进扩展。
 
-### 0.1 目标
+### 路线 A（源码构建；替代旧 fetch+boot）
 
-VS Code 扩展作为本地 dsh web 实例(127.0.0.1:3080,锁 0.1.0-rc.6)的第二个 viewer:
-**UI = dsh 原生 React 组件(vendor 源码构建),布局与浏览器版一致 + 侧边栏定制适配**。
-不内嵌 runtime、不另起实例、API key/credentials 不进扩展。
+- **vendor/deepseek-harness**（submodule，只读，rev `99f6f02` = rc.7）
+- **vendor 内独立 workspace 构建**：`build:lib:client` + `build:web`
+- **装配脚本 build-web-shell.mjs**：拷贝 shell → 拷贝 client 插件 → 静态组图 → 自产 index.html → resolveBase 适配缝
+- **运行时不变**：webview 经扩展侧 HTTP+WS 代理（Origin 栅栏绕行）
 
-### 0.2 路线 A(源码构建;替代 fetch+boot)
+### 红线（与 AGENTS.md 一致）
 
-- **vendor/deepseek-harness**(submodule,只读,rev `99f6f02` = 0.1.0-rc.7;
-  rc.6 仅 npm 产物,协议差异由 P5-5 冒烟把关)。
-- **vendor 内独立 workspace 构建**(嵌套 workspace 不入外层,见 pnpm-workspace.yaml 注释):
-  `corepack pnpm install --frozen-lockfile` → `pnpm run build:lib:client`(tsc + tsdown →
-  各 client 包 `lib/client.js`)+ `pnpm run build:web`(vite → `apps/web/dist` shell)。
-- **装配脚本 `apps/vscode/scripts/build-web-shell.mjs`**(替代 fetch-dsh-ui.mjs):
-  1. 拷贝 shell 产物(assets/ 等)→ `apps/vscode/dist/web/dsh-shell/`;
-  2. 拷贝各 client 包 `lib/client.js` → `dist/web/dsh-shell/plugins/<id>/client.js`
-     (id = 包全名,与上游 `/plugins/<id>/client.js` 路由同构);
-  3. 静态组图(镜像上游 ClientModuleRegistry 语义):扫描 client 包 `package.json` 的 `dsh.client`
-     (platform=web / immediately / inject)→ `__DSH_BOOT__ = {rev, entries:[{id, url:
-     "./plugins/<id>/client.js?rev=<hash>", rev, inject?, immediately?}]}`;与现存 rc.6 抓取图
-     (`dist/web/dsh-plugins/boot.js` 内 JSON)做集合核对;
-  4. 自产 `index.html`:注入 `__DSH_BOOT__`(首个 head script,`<` 转义,同上游 injectBootManifest)
-     + CSP(nonce)+ base href(产物根)+ `__DSH_WEB_URL__`(扩展侧代理地址);
-  5. **唯一适配缝**:connection `lib/client.js` 的 `resolveBase` 三元表达式确定性替换为
-     `globalThis.__DSH_WEB_URL__ ?? INTERNAL_BASE`;**断言式**——期望文本缺失即构建失败并提示
-     更新缝(替代原 regex 双模式替换)。
-- **运行时不变**:webview 经扩展侧 HTTP+WS 转发代理(`src/vscode/proxy.ts`,Origin 栅栏绕行,
-  d60c16f 结论);会话切换沿用 boot 桥 localStorage 契约(上游 attachPersistence 语义)。
-- **排除项(保持)**:changes 改动审查面板(自研)继续;协议层(runtime/wire/session-manager/
-  controller)保留。
+- 不 fork 上游、不改 vendor 源码、不改 packages/core / agent-loop
+- UI 由上游组件驱动；扩展不自维护 messages[]
+- 文件写走 WorkspaceEdit；terminal 走 VS Code API；runtime.ts 只做传输
 
-### 0.3 红线(与 AGENTS.md 一致,不因路线变更放松)
+### 版本锁定
 
-- 不 fork 上游、不改 vendor 内任何源码、不改 packages/core/agent-loop;禁止 Route B(内嵌
-  runtime)/Route C(重写 loop)。
-- UI 由上游组件 + 上游 connection 层驱动;扩展不自维护 messages[];model-visible ⟺ logged。
-- webview 安全:CSP 无 inline script(注入脚本用 nonce,同现状);API key/credentials 不下发
-  webview、不进事件渲染。
-- 文件写走 WorkspaceEdit/快照回滚;terminal 走 VS Code Terminal API;src/agent/runtime.ts
-  只做传输(薄桥)。
-
-### 0.4 版本与协议
-
-- 运行时锁 dsh 0.1.0-rc.6(3080);UI 源码 rev rc.7(`99f6f02`,记 docs/versions.md);
-  **升级只做专项 + 全量回归**。
-- 端点 `POST /api/<method>`(裸 `/api` 404);信封 `{type:"client-request", rpcId, method, payload}`
-  → `server-response`;WS 帧 `server-request`(host→client)。详见 docs/http-bridge.md。
+- 运行时：dsh 0.1.0-rc.7 @ 3080
+- UI 源码：rc.7 = `99f6f02`（记入 docs/versions.md）
+- 升级只做专项 + 全量回归
 
 ## 1. 技术基线
 
-- 环境:node v22.22.3 / pnpm 10.32.1(外层)/ corepack pnpm 11.7.0(vendor,随上游
-  packageManager 锁定)/ dsh 0.1.0-rc.6 @ 3080。
-- 测试:G0 = typecheck / lint / test / build 全绿;集成测试标 `@live`,无服务可跳过。
-- git:只 `git add <具体路径>`;commit 后立即 push;`feat|fix|chore|refactor|docs:` 前缀。
-- vendor 构建命令一律在 `vendor/deepseek-harness/` 内执行(corepack pnpm),产物不入外层
-  workspace;vendor 内不做任何 git 提交。
+- 环境：node ≥ 22.19 / pnpm 10.32.1（外层）/ corepack pnpm 11.7.0（vendor）
+- G0 提交门：`pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build`
+- 冒烟：`node apps/vscode/scripts/smoke-shell.mjs`（headless Chrome，3 个并行子测试）
+- 集成测试标 `@live`（`LIVE_3080=1` 才跑），无服务可跳过
+- git：只 `git add <具体路径>`，commit 后立即 push，`feat|fix|chore|refactor|docs:` 前缀
 
-## 2. 现状盘点(2026-08-17 实测)
+## 2. 阶段进度
 
-| 项 | 状态 | 说明 |
-| --- | --- | --- |
-| vendor submodule | ✅ | `47f94385`(0.1.0-rc.5)已初始化;rev 记入 docs/versions.md |
-| fetch+boot 产物 | ✅ 已退役 | fetch-dsh-ui.mjs 已删(c9f0350);`dist/web/dsh-shell` 为唯一 UI 源;`dsh-plugins` 旧目录仅留作本地参考(不入 git) |
-| Origin 栅栏 | ✅ 已解 | 扩展侧代理(d60c16f);代理本身保留 |
-| P0/P1/P2 整改 | ✅ | refactor-requirements.md 执行表;P0-2(Chat Participant)待用户 reload 验证 |
-| G0 | ✅ | typecheck 0 / lint 0 warning / 54 tests / build 3 入口(10:07 实测) |
-| vendor workspace 安装 | ✅ | 依赖已装(lefthook postinstall 失败为 submodule 限制,无关构建) |
+### Phase 5：vendor 构建打通 ✅
 
-## 3. 阶段计划
+- [x] P5-1 submodule 锁定 → docs/versions.md
+- [x] P5-2 vendor workspace 安装
+- [x] P5-3 `build:lib:client` + `build:web` 产出验证
+- [x] P5-4 装配脚本 build-web-shell.mjs（拷贝 + 组图 + index.html + resolveBase）
+- [x] P5-5 面板接线 + headless E2E（smoke-shell.mjs）
+- [x] P5-6 G0 四门 + 提交
 
-### Phase 5:vendor 构建打通(源码构建基座)
+### Phase 6：定制适配 ✅
 
-- [x] P5-1 submodule 锁定:`vendor/deepseek-harness` @ `47f94385`(0.1.0-rc.5)→ docs/versions.md 记录
-- [x] P5-2 vendor workspace 安装:corepack pnpm 11.7.0 install --frozen-lockfile
-- [x] P5-3 构建:vendor 内 `pnpm run build:lib:client` + `pnpm run build:web`;验证各 client 包
-      `lib/client.js` 与 `apps/web/dist` 产出(**实测:rc.5 源码构建产物与 rc.6 抓取产物字节级一致**)
-- [x] P5-4 装配脚本 `build-web-shell.mjs`:拷贝 + 静态组图(与 rc.6 抓取图核对,39 插件零缺失)+
-      index.html(静态注入 boot 脚本)+ resolveBase 断言式替换 → 产出 `dist/web/dsh-shell/`
-- [ ] P5-5 面板接线:chat-panel.ts 指向 dsh-shell(**接线完成**);headless E2E(`scripts/smoke-shell.mjs`,
-      Chrome + Origin 中继)通过:UI 渲染真实会话/工作区/模型/权限,RPC 经代理全通;
-      **VS Code 内视觉冒烟待 F5/启动扩展.command 确认**(已自动开一窗口,见 DSH_SMOKE_OPEN 钩子)
-- [ ] P5-6 G0 四门 + 提交(脚本 + 接线 + 文档)
+- [x] P6-1 boot 图裁剪（39→31 插件，ref-graph 断言一致）
+- [x] P6-2 侧边栏适配（shell.css 透明 + 窄布局原生可用）
+- [x] P6-3 主题对齐（透明走静态 CSS，组件表面色由上游决定）
+- [x] P6-4 扩展壳接线（`__DSH_WEB_URL__` 注入 + proxy.setTarget）
+- [x] P6-5 G0 + smoke 通过
 
-### Phase 6:定制适配(侧边栏形态)
+### Phase 7：功能验证与清理 ✅
 
-- [x] P6-1 定制 boot 图:插件子集(39→31,与 ref-graph-rc6.json 断言一致;含 inject 边裁剪;
-      directory-picker-browse 排除(in-app 浏览器不需要),directory-picker-native 保留
-      (renderless occupant → host.pickDirectory → VS Code showOpenDialog))
-- [x] P6-2 侧边栏适配:ui-layout 窄布局原生可用(280px 侧栏 + details 折叠);shell.css 静态样式
-      (html/body/#root + [class$=_frame/_sidebarCol/_centerCol/_detailsCol] 透明)替代
-      transparentPageChrome DOM 启发式,冒烟断言 body/frame 透明通过
-- [x] P6-3 主题对齐:透明走静态 CSS(shell.css,与 shell rev 绑定);组件表面色由上游主题决定
-      (与 3080 浏览器一致);VS Code 变量不做运行时注入
-- [x] P6-4 扩展壳接线:__DSH_WEB_URL__ 经 buildHtml 注入(代理地址);baseUrl 切换新增
-      proxy.setTarget(端口不变,转发重定向,webview 无需重载)
-- [x] P6-5 G0 四门绿 + smoke-shell 冒烟通过(28 集:无冲突、透明融合、RPC/WS 全通)
+- [x] P7-2 自研 UI 清理（web/* 聊天 UI 9 文件移除，G0 49 tests 绿）
+- [x] P7-3 文档同步（AGENTS.md / README / gaps.md / versions.md）
+- [x] P7-4 G0 + 手动测试清单
+- [ ] P7-1 全功能回归（人工，待用户执行）
 
-### Phase 7:功能验证与清理
+### Phase 8：交付门 ✅
 
-- [ ] P7-1 全功能回归:会话新建/切换/fork、聊天流式、工具调用、审批、subagent 打断、
-      goals、jobs、改动审查(自研面板仍工作)
-- [x] P7-2 自研 UI 清理:web/* 聊天 UI 9 文件 + panel.ts + display.test.ts + fetch-dsh-ui.mjs 移除
-      (build.mjs 仅剩 extension+changes 两入口;G0 49 tests 绿);bridge.ts 保留(changes 面板)
-- [x] P7-3 文档同步:AGENTS.md(Route A 重写:红线/工具链/Pitfalls)、README(状态/架构/安装)、
-      docs/gaps.md(Route A 实测发现)、docs/versions.md(vendor rev);http-bridge 协议未变
-- [x] P7-4 G0 四门绿 + 手动测试清单 docs/manual-tests/phase-5.md 落盘(待用户逐项执行)
-
-### Phase 8:交付门
-
-- [x] P8-1 G1 审查(Phase 5+6):docs/reviews/phase-5.md **PASS**(主代理出具,证据实测;独立子代理两轮超时)
-- [ ] P8-2 G2 交付门(全量回归:docs/manual-tests/phase-5.md 全项 + G0 + smoke-shell)
+- [x] P8-1 G1 审查 PASS（docs/reviews/phase-5.md）
+- [ ] P8-2 G2 交付门（全量回归 + G0 + smoke）
 - [ ] P8-3 tag + 发布文档
 
-### Phase 9:UI/UX 定制(2026-08-18 用户需求)
+### Phase 9：UI/UX 定制 ✅
 
-- [x] P9-1 布局:侧边栏隐藏,仅对话面板(session title/子代理/后台任务/Mode/Chat/Trajectory/对话内容/Todo/Goal/message block);
-      返回按钮(左上角,title 行 padding 让位)→ Workspaces 对话管理页(侧边栏内容独立页面;
-      窄 webview 侧边栏整页、宽 webview 浏览器布局自适应;点会话/新建后自动返回)
-- [x] P9-2 视图精简:VS Code 侧边栏只保留 Chat webview,移除 Sessions 树视图(会话管理移入 webview Workspaces 页)
-- [x] P9-3 主题同步:shell.css 将上游 --dsw-alias/--dsw-specific 语义色全部映射到 VS Code 主题变量
-      (--vscode-*,宿主变量 sideBar/editor 区分);data-ds-dark-theme 跟随 VS Code 主题(matchMedia 强制);
-      heroGlow 硬编码 #6187D8 → 宿主前景色(蓝光消除)
-- [x] P9-4 首开体验:扩展首次激活(或新文件夹无会话时)自动 ensureWorkspace(当前文件夹)
-      + 复用/新建 blank 会话 → __DSH_BOOT_SESSION__ 注入(boot 桥仅在 localStorage 无 current 时写入);
-      ready 时补发 dsh:bootstrap-session(竞态兜底)
-- [x] P9-5 设置映射:agentPreset → agent-presets.default(名册校验 + QuickPick 命令);
-      permission → permission.defaultPreset(修正原 preference 写法);locale/theme → 既有;
-      busyEnter → ui-conversation.busyEnter;双向同步(设置变更推实例 + 可见时 5s 轮询回写,抑制回环)
-- [x] P9-6 G0 四门绿(typecheck/lint 0/test 55+@live 57/build)+ smoke-shell 布局断言全 PASS
-      (侧栏 0 宽/返回按钮 body 直接子节点/Workspaces 页切换/自动返回)+ 三视图截图 vision 验证
+- [x] P9-1 布局（侧边栏隐藏，返回按钮 → Workspaces 独立页面）
+- [x] P9-2 视图精简（VS Code 侧边栏只保留 Chat webview）
+- [x] P9-3 主题同步（`--dsw-*` 全量映射 + heroGlow 覆盖）
+- [x] P9-4 首开体验（`__DSH_BOOT_SESSION__` 自动进入当前工作区）
+- [x] P9-5 设置映射（agentPreset / permission / locale / theme / busyEnter 双向同步）
+- [x] P9-6 G0 + smoke + 三视图截图验证
 
-### Phase 10:VS Code 原生文件/选区附着(2026-08-21 用户需求)
+### Phase 10：文件/选区附着 ✅
 
-需求(用户原文):
-1. **原生可拖拽 VS Code explorer 的文件** —— 从 Explorer 拖文件到 webview 对话输入区,
-   附着为待发送上下文(文件内容/路径随消息发送),与上游输入框共存。
-2. **原生可选择是否附着 VS Code 正在打开的文件** —— 可开关(设置 + UI 指示),开启后发送
-   消息时自动携带当前活动文件内容(含未保存改动)。
-3. **原生可选择是否附着 VS Code 正在打开的文件中已选择的内容** —— 可开关,开启后自动携带
-   当前活动编辑器选区(行列 + 文本)。
+- [x] P10-1 高级模型规格询问（docs/prompt-attach-vscode-files.md）
+- [x] P10-2 Explorer 文件原生拖入附着（text/uri-list + chip UI + 1MiB/20k/100k 上限）
+- [x] P10-3 附着活动文件（设置 + 指示 + 发送瞬间快照）
+- [x] P10-4 附着活动选区（设置 + 指示 + 多光标 + 整文件去重）
+- [x] P10-5 G0 + smoke 扩展断言 + 手动清单
 
-现状核查(2026-08-21,实施前基线):
-- 上游 ui-conversation 输入框**无附着/拖放机制**(vendor 源码无 dataTransfer/ondrop);红线
-  禁改 vendor → 附着 UI/拖放监听只能走既有桥注入模式(shell.css + nonce 脚本 + document
-  capture + postMessage 白名单),与会话管理页/输入行 title 注入同范式。
-- 可复用:src/vscode/editor.ts `collectEditorContext`(活动文件相对路径 + 选区 ≤20k 截断)、
-  src/agent/context.ts `formatEditorContext`(<editor-context> 前缀,askWithContext 已用)、
-  src/webview/bridge.ts(WebviewRequest/ExtensionMessage 类型化 union + 白名单校验)、
-  src/webview/shell-html.ts(nonce 注入点,__DSH_* 变量)。
-- 拖放机制(实测线索):Explorer→webview 拖放,VS Code 在 DataTransfer 注入 `vscode.Resource`
-  MIME(JSON URI 数组);已知坑:CustomEditor 类 webview 拖放曾失效(vscode#182449),普通
-  WebviewView 需实测;OS 桌面拖文件为 `Files`/`text/uri-list`,webview iframe 内取真实路径
-  需确认 `webUtils.getPathForFile` 可用性(版本/环境)。
-- 附着语义 = 文本注入(dsh 运行时仅 text 消息,无附件 RPC):"附着" = 消息前缀块 + webview 内
-  可移除 chip 指示;文件读取走 `vscode.workspace.fs`(扩展侧),webview 只传 URI 与开关状态。
-- 高级模型技术方案询问提示词:docs/prompt-attach-vscode-files.md(含现状/红线/问题清单/输出格式)。
+## 3. 阶段门
 
-- [x] P10-1 询问提示词落盘(docs/prompt-attach-vscode-files.md),交用户询问高级模型(规格已回贴)
-- [x] P10-2 **Explorer 文件原生拖入附着**:web/dsh-attachment-ui.ts(document capture 拖放监听,
-      text/uri-list 解析 + webUtils feature-detect 降级)→ bridge dsh:attachments:add(白名单 1..16,
-      uri ≤8k)→ context-attachments.addUris(Uri.parse/stat/目录拒绝/去重/上限)→ 发送时
-      workspace.fs 读取(1MiB 上限/二进制检测/20k 截断/总量 100k)→ formatSendContext 组装;
-      2026-08-21 迭代:附着条改注入 composer 座位容器([data-composer-seat])最前 =
-      输入框正上方,不触碰输入卡片内部(上游 card flex 布局不可插入);文件 chip 带 × 移除
-- [x] P10-3 **附着活动文件**:设置 deepseekHarness.context.attachActiveFile + toggleAttachActiveFile
-      命令;onDidChangeActiveTextEditor/onDidChangeConfiguration 推送状态;发送瞬间 document.getText()
-      快照(含未保存改动/untitled)。2026-08-21 迭代(用户反馈):UI 改为**存在即显示**的指示
-      (icon + 文件名,dirty 带 ●,悬停显完整路径;无活动文件时完全不显示,无禁用灰态;
-      开关只决定是否随消息附着,不影响显示),点击指示切换随消息附着(on=强调色)
-- [x] P10-4 **附着活动选区**:设置 attachSelection + 命令;onDidChangeTextEditorSelection 50ms
-      防抖;多光标全选区;空选区禁用;选区覆盖整文件与 full-file 去重。2026-08-21 迭代(用户反馈):
-      UI 改为**存在即显示**的指示(icon + "N lines selected",单行 "1 line selected";无选区时
-      完全不显示;开关只决定是否随消息附着),点击指示切换随消息附着(on=强调色)
-- [x] P10-5 G0 四门绿(typecheck/lint 0/test 91 含 33 个附着单测/build)+ smoke-shell 扩展断言已加入
-      (状态注入→chip 渲染、模拟 text/uri-list drop→回传 add,实测 Phase 10 断言全过)+ 手动清单
-      docs/manual-tests/phase-10.md。冒烟整体通过**待重跑**:脚本此前加载到 blank 会话导致既有
-      "返回按钮在 title 行内"断言必失败(环境性,与 Phase 10 无关),已修脚本(优先选非 blank 会话);
-      下次冒烟 + VS Code 内真机验证由用户安排
+- **G0 提交门**：typecheck / lint / test / build 全绿
+- **G1 阶段审查**：独立 reviewer 出具 PASS/FAIL
+- **G2 交付门**：全量回归 + G0 + smoke + 手动清单
+- Review 记录：`docs/reviews/phase-<n>.md`
 
+## 4. 风险登记
 
-## 4. 阶段门与验收(沿用)
+| # | 风险 | 缓解 |
+|---|------|------|
+| R1 | vendor 升级导致协议漂移 | 锁 rev + 升级专项 + 全量回归 |
+| R2 | resolveBase 适配缝随上游漂移 | 断言式替换，缺文本即构建失败 |
+| R3 | 静态组图与上游不一致 | 与 ref-graph 断言集合核对 |
+| R4 | 上游输入框冻结，附着 UI 只能桥注入 | 沿用 document capture + MutationObserver 模式 |
+| R5 | webview 拖放可靠性 | document 级 capture + 降级入口（命令/QuickPick） |
 
-- G0 提交门:typecheck / lint / test / build 全绿;集成测试 @live 可跳过。
-- G1 每阶段独立审查(独立 reviewer);P0/P1 未清即 FAIL。
-- G2 交付门:全量 §6.4 类核查 + §7 Checkbox。
-- Review 记录:docs/reviews/phase-<n>.md;进度快照更新于本文件顶部。
+## 5. 已退役方案（存档）
 
-## 5. 风险登记(§8 更新)
-
-| # | 风险 | 影响 | 缓解 |
-| --- | --- | --- | --- |
-| R1 | rc.5 源码 UI ↔ rc.6 运行时协议漂移 | 部分帧/端点不识别、UI 异常 | P5-5 冒烟全链把关;差异记 docs/versions.md;上游 rc.6 源码出现后升级专项 |
-| R2 | vendor workspace 安装/构建重 | 耗时长 | 后台执行;必要时 `--filter` 按需构建 |
-| R3 | 上游 boot 机制变更(AppWebEntry/__DSH_BOOT__ 形状) | 装配失效 | 锁 rev;升级专项 + 全量回归 |
-| R4 | resolveBase 适配缝随上游漂移 | 连接失败 | 断言式替换(缺文本即构建失败);升级专项 |
-| R5 | 静态组图与上游图不一致(漏/多插件) | 功能缺失/重复 | P5-4 与现存 rc.6 抓取图集合核对 |
-| R6 | 产物体积/加载性能 | 侧边栏慢 | 复用上游 vendor chunk 策略;按需分包 |
-| R7 | 上游输入框冻结:附着 UI/拖放只能桥注入(document capture + MutationObserver) | 注入层与上游重渲染冲突、chip 被清除 | 沿用会话页/title 行既有注入模式;冒烟断言;升级专项回归 |
-| R8 | webview 拖放可靠性与路径获取(vscode.Resource MIME 形状、webUtils 可用性、CustomEditor 类已知坑) | 拖入无响应/拿不到路径 | document 级 capture + dragover preventDefault;降级入口(命令/QuickPick 选文件);实测确认 |
-| R9 | 大文件/二进制/超大选区 → 上下文膨胀 | 消息超限、模型劣化 | 大小上限 + 截断(沿用 20k)+ 二进制检测(语言/空字节)+ 可降级为仅路径引用 |
-
-## 6. 执行
-
-按 Phase 5→8 顺序;每完成一步在 TASK.md 打勾;卡住即调整并记录原因。
-README「当前状态」在 P7-3 同步。
+- **fetch+boot**（fetch-dsh-ui.mjs）：产物对着活 3080 抓取，不可复现；debugBridge 模板字符串注入 minified shell（转义坑两次咬人）；已被 Route A 取代（c9f0350 删除）
+- **112GT 参考路线**（vendored runtime + spawn sidecar + 自研 chat UI）：违反红线（Route B 内嵌 runtime），不采纳
